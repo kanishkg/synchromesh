@@ -1,6 +1,19 @@
 from lark import Lark, Token
 from lark.exceptions import UnexpectedCharacters
 
+import regex
+
+
+class CompletionEngine:
+    def complete(self, prefix: str) -> regex.Pattern:
+        raise NotImplementedError()
+
+
+class LarkCompletionEngine(CompletionEngine):
+    def __init__(self, grammar):
+        pass
+
+
 # TODO: make this a class
 def get_completions(text, parser):
     interactive_parser = parser.parse_interactive(text)
