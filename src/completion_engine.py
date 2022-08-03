@@ -1,3 +1,4 @@
+from functools import partial
 from lark import Lark, Token
 from lark.exceptions import UnexpectedCharacters
 
@@ -24,7 +25,9 @@ class LarkCompletionEngine(CompletionEngine):
             print("Unexpected character, string is not complete")
         valid_tokens = interactive_parser.accepts()
         # get the regex for the valid tokens
-        valid_regex = [fr'{self.terminal_dict[t].pattern}' for t in valid_tokens if t!='$END']
+        valid_regex = [f'{self.terminal_dict[t].pattern.to_regexp()}' for t in valid_tokens if t!='$END']
+        valid_regex = '|'.join(valid_regex)
+        valid_regex = regex.compile(valid_regex)
         return valid_regex
 
 
@@ -54,7 +57,7 @@ def main():
     json_comp_engine = LarkCompletionEngine(json_grammar, 'value')
     text = '{"a": 1, "b": 2, "c": {"d": 3, "e":'
     valid_regexes = json_comp_engine.complete(text)
-    print(valid_regexes)
+    print(valid_regexes.fullmatch('"abc', partial=True))
     # end_token = Token.new_borrow_pos('$END', '', token) if token else Token('$END', '', 0, 1, 1)
     # interactive_parser.parser_state.feed_token(end_token, True)
 
