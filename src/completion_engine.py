@@ -8,6 +8,9 @@ import regex
 class CompletionEngine:
     def complete(self, prefix: str) -> regex.Pattern:
         raise NotImplementedError()
+    
+    def is_complete(self, prefix: str) -> bool:
+        return self.complete(prefix) == regex.compile('')
 
 
 class LarkCompletionEngine(CompletionEngine):
@@ -22,7 +25,7 @@ class LarkCompletionEngine(CompletionEngine):
             for token in interactive_parser.parser_state.lexer.lex(interactive_parser.parser_state): 
                 interactive_parser.parser_state.feed_token(token)
         except UnexpectedCharacters as e:
-            print("Unexpected character, string is not complete")
+            pass
         valid_tokens = interactive_parser.accepts()
         # get the regex for the valid tokens
         valid_regex = [f'{self.terminal_dict[t].pattern.to_regexp()}' for t in valid_tokens if t!='$END']
@@ -46,7 +49,7 @@ def main():
         dict : "{" [pair ("," pair)*] "}"
         pair : string ":" value
 
-        string : ESCAPED_STRING
+        string : "\"" /[a-zA-Z0-9 ]{0,10}/ "\""
 
         %import common.ESCAPED_STRING
         %import common.SIGNED_NUMBER
@@ -55,8 +58,11 @@ def main():
 
         """
     json_comp_engine = LarkCompletionEngine(json_grammar, 'value')
-    text = '{"a": 1, "b": 2, "c": {"d": 3, "e":'
+    text = '{"8W{0sxM{{}]]vpEC4|i;]V@Jg_#P^j\n?k%noXNt\2#2]a8a\PJru]/`M6gaqb@EhFx"'
     valid_regexes = json_comp_engine.complete(text)
+    empty = regex.compile('')
+    print(valid_regexes)
+    print(valid_regexes == empty)
     print(valid_regexes.fullmatch('"abc', partial=True))
     # end_token = Token.new_borrow_pos('$END', '', token) if token else Token('$END', '', 0, 1, 1)
     # interactive_parser.parser_state.feed_token(end_token, True)

@@ -2,8 +2,8 @@
 
 import regex
 
-from completion_engine import CompletionEngine
-from language_model import LanguageModel
+from completion_engine import CompletionEngine, LarkCompletionEngine
+from language_model import LanguageModel, RandomLanguageModel
 
 
 # Implements the Constrained Semantic Decoding algorithm.
@@ -12,23 +12,18 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel) 
 
     completion_points[''] = completion_engine.complete('')
 
-    done = False
     prediction = ''
 
-    while not done:
+    while not completion_engine.is_complete(prediction):
         valid_tokens = []
 
         for i, token in enumerate(lm.vocabulary()):
             if is_prefix_valid(completion_engine, completion_points, prediction + token):
                 valid_tokens.append(i)
 
+        assert len(valid_tokens) > 0, f"No valid tokens for {repr(prediction)}"
         predicted_token = lm.predict_token(prediction, valid_tokens)
-
-        if predicted_token == lm.stop_token():
-            done = True
-        else:
-            prediction += lm.vocabulary()[predicted_token]
-
+        prediction += lm.vocabulary()[predicted_token]
     return prediction
 
 
@@ -63,3 +58,31 @@ def is_prefix_valid(completion_engine: CompletionEngine,
 
     #    Case c- Got to the end with no violations, return True
     return True
+
+if __name__ == "__main__":
+    json_grammar = r"""
+        ?value: dict
+            | list
+            | string
+            | SIGNED_NUMBER      -> number
+            | "true"             -> true
+            | "false"            -> false
+            | "null"             -> null
+
+        list : "[" [value ("," value)*] "]"
+
+        dict : "{" [pair ("," pair)*] "}"
+        pair : string ":" value
+
+        string : "\"" /[A-Z]{3}/ "\""
+
+        %import common.ESCAPED_STRING
+        %import common.SIGNED_NUMBER
+        %import common.WS
+        %ignore WS
+
+        """
+    for i in range(1000):
+        json_comp_engine = LarkCompletionEngine(json_grammar, 'value')
+        rlm = RandomLanguageModel()
+        print(predict_constrained(json_comp_engine, rlm))
