@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 
+import os
+from sys import prefix
 import regex
 
 from completion_engine import CompletionEngine, LarkCompletionEngine
-from language_model import LanguageModel, RandomLanguageModel
+from language_model import LanguageModel, RandomLanguageModel, OpenAIModel
 
 
 # Implements the Constrained Semantic Decoding algorithm.
@@ -15,6 +17,7 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel) 
     prediction = ''
 
     while not completion_engine.is_complete(prediction):
+        print(f"{prediction}")
         valid_tokens = []
 
         for i, token in enumerate(lm.vocabulary()):
@@ -82,7 +85,10 @@ if __name__ == "__main__":
         %ignore WS
 
         """
-    for i in range(1000):
+    prompt = "# example of a json \n json={\"key\": \"value\"} \n json2="
+    api_key = os.environ.get('OPENAI_API_KEY')
+    for i in range(1):
         json_comp_engine = LarkCompletionEngine(json_grammar, 'value')
         rlm = RandomLanguageModel()
-        print(predict_constrained(json_comp_engine, rlm))
+        gpt3 = OpenAIModel(model="text-davinci-002", prompt_template=prompt, api_key=api_key)
+        print(predict_constrained(json_comp_engine, gpt3))
