@@ -91,4 +91,4 @@ if __name__ == "__main__":
         json_comp_engine = LarkCompletionEngine(json_grammar, 'value')
         rlm = RandomLanguageModel()
         gpt3 = OpenAIModel(model="text-davinci-002", prompt_template=prompt, api_key=api_key)
-        print(predict_constrained(json_comp_engine, gpt3))
+        print(predict_constrained(json_comp_engine, rlm))
