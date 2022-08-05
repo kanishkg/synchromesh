@@ -93,7 +93,6 @@ if __name__ == "__main__":
     """
     college_prompt = "Paraphrase the following sentences\n Human:who teaches CSE101? \n Bot:instructor_of:CSE101 \n Human:how many students can enroll in PSY456? \n Bot:capacity_of:PSY456 \n Human:who teaches BIO433? \n Bot:"
     api_key = os.environ.get('OPENAI_API_KEY')
-    api_key = "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"
     for i in range(1):
         json_comp_engine = LarkCompletionEngine(college_grammar, 'request')
         rlm = RandomLanguageModel()
