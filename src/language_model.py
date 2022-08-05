@@ -57,7 +57,7 @@ class OpenAIModel(LanguageModel):
         candidates = []
         for i in range(len(valid_tokens)//300+1):
             valid_bias = {k: 100 for k in valid_tokens[i*300:(i+1)*300]}
-            response = openai.Completion.create(model=self.model, prompt=f"{self.prompt_template.format} {prefix}",
+            response = openai.Completion.create(model=self.model, prompt=f"{self.prompt_template} {prefix}",
                                                 temperature=self.temperature, top_p=self.top_p,
                                                 best_of=self.best_of, max_tokens=1, logit_bias=valid_bias)
             candidates.append(self.token_idx[response.choices[0].text])

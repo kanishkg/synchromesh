@@ -17,7 +17,7 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel) 
     prediction = ''
 
     while not completion_engine.is_complete(prediction):
-        print(f"{prediction}")
+        print(prediction)
         valid_tokens = []
 
         for i, token in enumerate(lm.vocabulary()):
@@ -85,10 +85,17 @@ if __name__ == "__main__":
         %ignore WS
 
         """
-    prompt = "# example of a json \n json={\"key\": \"value\"} \n json2="
+    college_grammar = r"""
+        ?request: function ":" dept code 
+        function: "instructor_of" | "students_of" | "capacity_of" | "department_of" | "school_of" | "college_of"
+        dept:  /[A-Z]{3}/ 
+        code: /[0-9]{3}/
+    """
+    college_prompt = "Paraphrase the following sentences\n Human:who teaches CSE101? \n Bot:instructor_of:CSE101 \n Human:how many students can enroll in PSY456? \n Bot:capacity_of:PSY456 \n Human:who teaches BIO433? \n Bot:"
     api_key = os.environ.get('OPENAI_API_KEY')
+    api_key = "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"
     for i in range(1):
-        json_comp_engine = LarkCompletionEngine(json_grammar, 'value')
+        json_comp_engine = LarkCompletionEngine(college_grammar, 'request')
         rlm = RandomLanguageModel()
-        gpt3 = OpenAIModel(model="text-davinci-002", prompt_template=prompt, api_key=api_key)
-        print(predict_constrained(json_comp_engine, rlm))
+        gpt3 = OpenAIModel(model="text-ada-001", prompt_template=college_prompt, api_key=api_key, temperature=0.7)
+        print(predict_constrained(json_comp_engine, gpt3))
