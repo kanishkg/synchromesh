@@ -31,7 +31,7 @@ class RandomLanguageModel(LanguageModel):
 
 class OpenAIModel(LanguageModel):
     def __init__(self, model: str, prompt_template: str, api_key: str,
-                 temperature: float = 1.0, top_p: float = 0.9, best_of: int = 1) -> None:
+                 temperature: float = 1.0, top_p: float = 1.0, best_of: int = 1) -> None:
         super().__init__()
         openai.api_key = api_key
         self.prompt_template = prompt_template
@@ -43,6 +43,8 @@ class OpenAIModel(LanguageModel):
         url = "https://huggingface.co/gpt2/resolve/main/vocab.json"
         response = urlopen(url)
         self.token_idx = json.loads(response.read())
+        self.token_idx = {s.replace('\u0120',' '):i for s,i in self.token_idx.items()}
+            
 
     def vocabulary(self) -> list[str]:
         # sort keys by value, then return the keys
@@ -57,7 +59,7 @@ class OpenAIModel(LanguageModel):
         candidates = []
         for i in range(len(valid_tokens)//300+1):
             valid_bias = {k: 100 for k in valid_tokens[i*300:(i+1)*300]}
-            response = openai.Completion.create(model=self.model, prompt=f"{self.prompt_template} {prefix}",
+            response = openai.Completion.create(model=self.model, prompt=f"{self.prompt_template}{prefix}",
                                                 temperature=self.temperature, top_p=self.top_p,
                                                 best_of=self.best_of, max_tokens=1, logit_bias=valid_bias)
             candidates.append(self.token_idx[response.choices[0].text])
@@ -69,4 +71,4 @@ class OpenAIModel(LanguageModel):
         return self.token_idx[response.choices[0].text]
 
     def stop_token(self) -> int:
-        return self.token_idx[self.vocabulary()[-1]]
+        return "<eos"
