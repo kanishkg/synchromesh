@@ -43,10 +43,12 @@ class OpenAIModel(LanguageModel):
         url = "https://huggingface.co/gpt2/resolve/main/vocab.json"
         response = urlopen(url)
         self.token_idx = json.loads(response.read())
+        # replace the weird character that is pretokenized from leading space:
+        self.token_idx = {s.replace('\u0120',' '):i for s,i in self.token_idx.items()}
 
     def vocabulary(self) -> list[str]:
         # sort keys by value, then return the keys
-        vocab = sorted(self.token_idx.keys(), key=lambda k: self.token_idx[k])
+        vocab = sorted(self.token_idx.keys(), key=lambda k: self.token_idx[k])        
         return vocab
 
     def predict_token(self, prefix: str, valid_tokens: list[int]) -> int:
@@ -55,17 +57,18 @@ class OpenAIModel(LanguageModel):
         # hacky way to do this
         # TODO: change to use masking over logits instead of bias
         candidates = []
+        prompt=f"{self.prompt_template} {prefix}"
         for i in range(len(valid_tokens)//300+1):
             valid_bias = {k: 100 for k in valid_tokens[i*300:(i+1)*300]}
-            response = openai.Completion.create(model=self.model, prompt=f"{self.prompt_template.format} {prefix}",
+            response = openai.Completion.create(model=self.model, prompt=prompt,
                                                 temperature=self.temperature, top_p=self.top_p,
                                                 best_of=self.best_of, max_tokens=1, logit_bias=valid_bias)
             candidates.append(self.token_idx[response.choices[0].text])
         valid_bias = {k: 100 for k in candidates}
-        response = openai.Completion.create(model=self.model, prompt=f"{self.prompt_template.format} {prefix}",
+        response = openai.Completion.create(model=self.model, prompt=prompt,
                                             temperature=self.temperature, top_p=self.top_p,
                                             best_of=self.best_of, max_tokens=1, logit_bias=valid_bias)
-
+        # print(f"openai prompt {prompt}, response {response}")
         return self.token_idx[response.choices[0].text]
 
     def stop_token(self) -> int:
