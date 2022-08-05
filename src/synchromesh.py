@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from lib2to3.pgen2 import grammar
 import os
 from sys import prefix
 import regex
@@ -17,13 +18,11 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel) 
     prediction = ''
 
     while not completion_engine.is_complete(prediction):
-        print(prediction)
         valid_tokens = []
 
         for i, token in enumerate(lm.vocabulary()):
             if is_prefix_valid(completion_engine, completion_points, prediction + token):
                 valid_tokens.append(i)
-
         assert len(valid_tokens) > 0, f"No valid tokens for {repr(prediction)}"
         predicted_token = lm.predict_token(prediction, valid_tokens)
         prediction += lm.vocabulary()[predicted_token]
@@ -53,6 +52,9 @@ def is_prefix_valid(completion_engine: CompletionEngine,
             if completion_point_regex.fullmatch(remainder[:i]):
                 # We found another completion point, reduce the problem and call recursively.
                 new_completion_point = s[:longest_completion_point] + remainder[:i]
+                # check if this base case is correct. (this is the case for the terminal symbol)
+                if completion_engine.is_complete(new_completion_point):
+                    return False
                 new_completion_point_regex = completion_engine.complete(new_completion_point)
                 completion_points[new_completion_point] = new_completion_point_regex
                 return is_prefix_valid(completion_engine, completion_points, s)
@@ -85,16 +87,25 @@ if __name__ == "__main__":
         %ignore WS
 
         """
+
     college_grammar = r"""
-        ?request: function ":" dept code 
-        function: "instructor_of" | "students_of" | "capacity_of" | "department_of" | "school_of" | "college_of"
+        ?request: function " " dept code
+        function: "instructor of" | "students of" | "capacity of" | "department of" | "school of" | "college of"
         dept:  /[A-Z]{3}/ 
         code: /[0-9]{3}/
     """
-    college_prompt = "Paraphrase the following sentences\n Human:who teaches CSE101? \n Bot:instructor_of:CSE101 \n Human:how many students can enroll in PSY456? \n Bot:capacity_of:PSY456 \n Human:who teaches BIO433? \n Bot:"
+
+    college_prompt = """Paraphrase the following sentences\n  
+                    Human:who teaches CSE101? \n Bot:instructor of CSE101 \n 
+                    Human:how many students can enroll in PSY456? \n 
+                    Bot:capacity of PSY456 \n 
+                    Human:who teaches BIO433? \n 
+                    Bot:"""
+    
+    num_samples = 1
     api_key = os.environ.get('OPENAI_API_KEY')
-    for i in range(1):
+    for i in range(num_samples):
         json_comp_engine = LarkCompletionEngine(college_grammar, 'request')
-        rlm = RandomLanguageModel()
-        gpt3 = OpenAIModel(model="text-ada-001", prompt_template=college_prompt, api_key=api_key, temperature=0.7)
+        # rlm = RandomLanguageModel()
+        gpt3 = OpenAIModel(model="text-davinci-002", prompt_template=college_prompt, api_key=api_key, temperature=1.0)
         print(predict_constrained(json_comp_engine, gpt3))
