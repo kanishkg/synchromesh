@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 
-from lib2to3.pgen2 import grammar
 import os
-from sys import prefix
 import regex
 
 from completion_engine import CompletionEngine, LarkCompletionEngine
