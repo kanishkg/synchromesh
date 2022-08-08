@@ -11,10 +11,7 @@ class LanguageModel:
     def vocabulary(self) -> list[str]:
         raise NotImplementedError()
 
-    def stop_token(self) -> int:
-        raise NotImplementedError()
-
-    def predict_token(self, prefix: str, valid_tokens: list[int]) -> int:
+    def predict_token(self, prefix: str, valid_tokens: list[int], top_k: int = 1) -> tuple[list[int], list[float]]:
         'Given prefix (prompt + already generated code), predicts next token'
         raise NotImplementedError()
 
@@ -23,11 +20,10 @@ class RandomLanguageModel(LanguageModel):
     def vocabulary(self) -> list[str]:
         return list(map(chr, range(128)))
 
-    def predict_token(self, prefix: str, valid_tokens: list[int]) -> int:
-        return random.choice(valid_tokens)
-
-    def stop_token(self) -> int:
-        return ord('\n')
+    def predict_token(self, prefix: str, valid_tokens: list[int], top_k: int = 1) -> tuple[list[int], list[float]]:
+        predictions = random.sample(valid_tokens, min(top_k, len(valid_tokens)))
+        probabilities = [1.0 / len(predictions)] * len(predictions)
+        return predictions, probabilities
 
 class OpenAIModel(LanguageModel):
     def __init__(self, model: str, prompt_template: str, api_key: str,
@@ -51,26 +47,26 @@ class OpenAIModel(LanguageModel):
         vocab = sorted(self.token_idx.keys(), key=lambda k: self.token_idx[k])
         return vocab
 
-    def predict_token(self, prefix: str, valid_tokens: list[int]) -> int:
+    def predict_token(self, prefix: str, valid_tokens: list[int], top_k: int = 1) -> tuple[list[int], list[float]]:
         # change bias of valid tokens to make them more likely
-        # bias can only be set for 300 tokens
-        # hacky way to do this
-        # TODO: change to use masking over logits instead of bias
-        candidates = []
+        # bias can only be set for 300 tokens at a time
+        assert top_k <= 5, "top_k must be less than or equal to 5"
+        predictions, probabilities = [], []
         prompt = f"{self.prompt_template}{prefix}"
         for i in range(len(valid_tokens)//300+1):
             valid_bias = {k: 100 for k in valid_tokens[i*300:(i+1)*300]}
-            response = openai.Completion.create(model=self.model, prompt=prompt,
+            response = openai.Completion.create(model=self.model, prompt=prompt, logprobs=top_k,
                                                 temperature=self.temperature, top_p=self.top_p,
                                                 best_of=self.best_of, max_tokens=1, logit_bias=valid_bias)
-            candidates.append(self.token_idx[response.choices[0].text])
-        if len(candidates) > 1:
-            valid_bias = {k: 100 for k in candidates}
-            response = openai.Completion.create(model=self.model, prompt=prompt,
-                                                temperature=self.temperature, top_p=self.top_p,
-                                                best_of=self.best_of, max_tokens=1, logit_bias=valid_bias)
+            response_dict = response.choices[0].logprobs.top_logprobs[0]
+            for k in sorted(response_dict.keys()):
+                predictions.append(self.token_idx[k])
+                probabilities.append(response_dict[k])
 
-        return self.token_idx[response.choices[0].text]
-
-    def stop_token(self) -> int:
-        return "<eos"
+        # sort predictions by probability
+        predictions = [c for _, c in sorted(zip(probabilities, predictions), key=lambda x: x[0], reverse=True)]
+        probabilities = sorted(probabilities, reverse=True)
+        predictions = predictions[:min(top_k, len(predictions))]
+        predictions = [c for c in predictions]
+        probabilities = probabilities[:min(top_k, len(probabilities))]
+        return  predictions, probabilities

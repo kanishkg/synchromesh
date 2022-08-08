@@ -10,7 +10,8 @@ from language_model import LanguageModel, RandomLanguageModel, OpenAIModel
 
 
 # Implements the Constrained Semantic Decoding algorithm.
-def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel) -> str:
+def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
+                        top_k: int = 1, verbose: bool = True) -> str:
     completion_points: dict[str, regex.Pattern] = {}
 
     completion_points[''] = completion_engine.complete('')
@@ -24,7 +25,13 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel) 
             if is_prefix_valid(completion_engine, completion_points, prediction + token):
                 valid_tokens.append(i)
         assert len(valid_tokens) > 0, f"No valid tokens for {repr(prediction)}"
-        predicted_token = lm.predict_token(prediction, valid_tokens)
+        predictions, probabilities = lm.predict_token(prediction, valid_tokens, top_k)
+        if verbose:
+            print(f"current prediction: {prediction}")
+            print(f"Top {min(top_k, len(valid_tokens))} next tokens:")
+            for i in range(len(predictions)):
+                print(f'{i+1}. {lm.vocabulary()[predictions[i]]} {probabilities[i]}')
+        predicted_token = predictions[0]
         prediction += lm.vocabulary()[predicted_token]
     return prediction
 
@@ -108,4 +115,4 @@ if __name__ == "__main__":
         json_comp_engine = LarkCompletionEngine(college_grammar, 'request')
         # rlm = RandomLanguageModel()
         gpt3 = OpenAIModel(model="text-davinci-002", prompt_template=college_prompt, api_key=api_key, temperature=1.0)
-        print(predict_constrained(json_comp_engine, gpt3))
+        print(predict_constrained(json_comp_engine, gpt3, 3, True))
