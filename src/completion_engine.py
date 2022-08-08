@@ -1,5 +1,4 @@
-from functools import partial
-from lark import Lark, Token
+from lark import Lark
 from lark.exceptions import UnexpectedCharacters
 
 import regex
