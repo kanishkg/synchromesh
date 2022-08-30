@@ -70,3 +70,11 @@ class OpenAIModel(LanguageModel):
         predictions = [c for c in predictions]
         probabilities = probabilities[:min(top_k, len(probabilities))]
         return  predictions, probabilities
+    
+    def predict_unconstrained_token(self, prompt, max_tokens, stop=None):
+        response = openai.Completion.create(model=self.model, prompt=prompt, logprobs=5,
+                                            temperature=self.temperature, top_p=self.top_p,
+                                            best_of=self.best_of, max_tokens=max_tokens, stop=stop)
+        response_dict = response.choices[0].logprobs.top_logprobs[0]
+        text = response.choices[0].text
+        return text
