@@ -2,9 +2,10 @@
 
 import os
 import regex
+import time
 
-from completion_engine import CompletionEngine, LarkCompletionEngine
-from language_model import LanguageModel, RandomLanguageModel, OpenAIModel
+from synchromesh.completion_engine import CompletionEngine, LarkCompletionEngine
+from synchromesh.language_model import LanguageModel, RandomLanguageModel, OpenAIModel
 
 
 # Implements the Constrained Semantic Decoding algorithm.
@@ -22,8 +23,11 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
         for i, token in enumerate(lm.vocabulary()):
             if is_prefix_valid(completion_engine, completion_points, prediction + token):
                 valid_tokens.append(i)
+            if len(valid_tokens) > 1200:
+                break
         assert len(valid_tokens) > 0, f"No valid tokens for {repr(prediction)}"
         predictions, probabilities = lm.predict_token(prediction, valid_tokens, top_k)
+        time.sleep(1.0)
         if verbose:
             print(f"current prediction: {prediction}")
             print(f"Top {min(top_k, len(valid_tokens))} next tokens:")

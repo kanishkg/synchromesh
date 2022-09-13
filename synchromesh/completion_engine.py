@@ -1,5 +1,5 @@
 from lark import Lark
-from lark.exceptions import UnexpectedCharacters
+from lark.exceptions import UnexpectedCharacters, UnexpectedToken
 
 import regex
 
@@ -24,6 +24,8 @@ class LarkCompletionEngine(CompletionEngine):
             for token in interactive_parser.parser_state.lexer.lex(interactive_parser.parser_state): 
                 interactive_parser.parser_state.feed_token(token)
         except UnexpectedCharacters as e:
+            pass
+        except UnexpectedToken as e:
             pass
         valid_tokens = interactive_parser.accepts()
         # get the regex for the valid tokens

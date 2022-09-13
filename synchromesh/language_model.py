@@ -53,15 +53,27 @@ class OpenAIModel(LanguageModel):
         assert top_k <= 5, "top_k must be less than or equal to 5"
         predictions, probabilities = [], []
         prompt = f"{self.prompt_template}{prefix}"
-        for i in range(len(valid_tokens)//300+1):
-            valid_bias = {k: 100 for k in valid_tokens[i*300:(i+1)*300]}
+        # use constrained prediction if valid tokens are less than 1200; 4 requests
+        if len(valid_tokens) < 1200:
+            for i in range(len(valid_tokens)//300+1):
+                valid_bias = {k: 100 for k in valid_tokens[i*300:(i+1)*300]}
+                response = openai.Completion.create(model=self.model, prompt=prompt, logprobs=top_k,
+                                                    temperature=self.temperature, top_p=self.top_p,
+                                                    best_of=self.best_of, max_tokens=1, logit_bias=valid_bias)
+                response_dict = response.choices[0].logprobs.top_logprobs[0]
+                for k in sorted(response_dict.keys()):
+                    predictions.append(self.token_idx[k])
+                    probabilities.append(response_dict[k])
+        # use unconstrained prediction if there are too many valid tokens
+        else:
             response = openai.Completion.create(model=self.model, prompt=prompt, logprobs=top_k,
                                                 temperature=self.temperature, top_p=self.top_p,
-                                                best_of=self.best_of, max_tokens=1, logit_bias=valid_bias)
+                                                best_of=self.best_of, max_tokens=1)
             response_dict = response.choices[0].logprobs.top_logprobs[0]
             for k in sorted(response_dict.keys()):
                 predictions.append(self.token_idx[k])
                 probabilities.append(response_dict[k])
+            
 
         # sort predictions by probability
         predictions = [c for _, c in sorted(zip(probabilities, predictions), key=lambda x: x[0], reverse=True)]
