@@ -3,20 +3,23 @@ from lark.exceptions import UnexpectedCharacters, UnexpectedToken
 
 import regex
 
+EPS_REGEX = regex.compile('')
+
 
 class CompletionEngine:
     def complete(self, prefix: str) -> regex.Pattern:
         raise NotImplementedError()
-    
+
     def is_complete(self, prefix: str) -> bool:
-        return self.complete(prefix) == regex.compile('')
+        return self.complete(prefix) == EPS_REGEX
 
 
 class LarkCompletionEngine(CompletionEngine):
-    def __init__(self, grammar, start_token):
+    def __init__(self, grammar, start_token, allow_ws: bool):
         self.parser = Lark(grammar, start=start_token, parser='lalr', regex=True)
         self.terminal_dict = self.parser._terminals_dict
-    
+        self.allow_ws = allow_ws
+
     def complete(self, prefix: str) -> regex.Pattern:
         interactive_parser = self.parser.parse_interactive(prefix)
         token = None
@@ -30,6 +33,10 @@ class LarkCompletionEngine(CompletionEngine):
         valid_tokens = interactive_parser.accepts()
         # get the regex for the valid tokens
         valid_regex = [f'{self.terminal_dict[t].pattern.to_regexp()}' for t in valid_tokens if t!='$END']
+
+        if valid_regex and self.allow_ws:
+            valid_regex.append("\\s+")
+
         valid_regex = '|'.join(valid_regex)
         valid_regex = regex.compile(valid_regex)
         return valid_regex

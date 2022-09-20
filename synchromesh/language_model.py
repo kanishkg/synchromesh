@@ -11,8 +11,20 @@ class LanguageModel:
     def vocabulary(self) -> list[str]:
         raise NotImplementedError()
 
+    def predict_tokens(self, prefix: str, n: int) -> list[int]:
+        raise NotImplementedError()
+
     def predict_token(self, prefix: str, valid_tokens: list[int], top_k: int = 1) -> tuple[list[int], list[float]]:
         'Given prefix (prompt + already generated code), predicts next token'
+        raise NotImplementedError()
+
+    def tokenize(self, s: str) -> list[int]:
+        raise NotImplementedError()
+
+    def get_token(self, i: int) -> str:
+        return self.vocabulary()[i]
+
+    def predict_unconstrained(self, prefix: str, max_tokens: int, stop=None):
         raise NotImplementedError()
 
 
@@ -25,9 +37,12 @@ class RandomLanguageModel(LanguageModel):
         probabilities = [1.0 / len(predictions)] * len(predictions)
         return predictions, probabilities
 
+    def predict_unconstrained(self, prefix, max_tokens, stop=None):
+        return ''.join(random.choices(self.vocabulary(), k=max_tokens))
+
 class OpenAIModel(LanguageModel):
     def __init__(self, model: str, prompt_template: str, api_key: str,
-                 temperature: float = 1.0, top_p: float = 1.0, best_of: int = 1) -> None:
+                 temperature: float = 0.0, top_p: float = 1.0, best_of: int = 1) -> None:
         super().__init__()
         openai.api_key = api_key
         self.prompt_template = prompt_template
@@ -37,15 +52,30 @@ class OpenAIModel(LanguageModel):
         self.best_of = best_of
         # for gpt series of models
         url = "https://huggingface.co/gpt2/resolve/main/vocab.json"
-        response = urlopen(url)
-        self.token_idx = json.loads(response.read())
-        self.token_idx = {s.replace('\u0120',' '):i for s,i in self.token_idx.items()}
-            
+        with urlopen(url) as response:
+            self.token_idx = json.loads(response.read())
+        self.token_idx = {s.replace('\u0120', ' '): i
+                          for s, i in self.token_idx.items()}
+        self.vocab = sorted(self.token_idx.keys(), key=lambda k: self.token_idx[k])
+
+    def tokenize(self, s: str) -> list[int]:
+        vocab = self.vocabulary()
+        tokens = []
+
+        while s:
+            # Find longest token that is a prefix of s.
+            l = 1
+            while l <= len(s) and s[:l] in self.token_idx:
+                l += 1
+            # Add it to tokens, remove from s.
+            tokens.append(self.token_idx[s[:(l - 1)]])
+            s = s[(l - 1):]
+
+        return tokens
 
     def vocabulary(self) -> list[str]:
         # sort keys by value, then return the keys
-        vocab = sorted(self.token_idx.keys(), key=lambda k: self.token_idx[k])
-        return vocab
+        return self.vocab
 
     def predict_token(self, prefix: str, valid_tokens: list[int], top_k: int = 1) -> tuple[list[int], list[float]]:
         # change bias of valid tokens to make them more likely
@@ -82,11 +112,10 @@ class OpenAIModel(LanguageModel):
         predictions = [c for c in predictions]
         probabilities = probabilities[:min(top_k, len(probabilities))]
         return  predictions, probabilities
-    
-    def predict_unconstrained_token(self, prompt, max_tokens, stop=None):
-        response = openai.Completion.create(model=self.model, prompt=prompt, logprobs=5,
+
+    def predict_unconstrained(self, prefix, max_tokens, stop=None):
+        prompt = f"{self.prompt_template}{prefix}"
+        response = openai.Completion.create(model=self.model, prompt=prompt,
                                             temperature=self.temperature, top_p=self.top_p,
                                             best_of=self.best_of, max_tokens=max_tokens, stop=stop)
-        response_dict = response.choices[0].logprobs.top_logprobs[0]
-        text = response.choices[0].text
-        return text
+        return response.choices[0].text

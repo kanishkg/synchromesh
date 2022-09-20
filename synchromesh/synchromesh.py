@@ -10,7 +10,8 @@ from synchromesh.language_model import LanguageModel, RandomLanguageModel, OpenA
 
 # Implements the Constrained Semantic Decoding algorithm.
 def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
-                        top_k: int = 1, verbose: bool = True) -> str:
+                        top_k: int = 1, verbose: bool = True,
+                        batch_size: int = 50) -> str:
     completion_points: dict[str, regex.Pattern] = {}
 
     completion_points[''] = completion_engine.complete('')
@@ -18,23 +19,39 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
     prediction = ''
 
     while not completion_engine.is_complete(prediction):
-        valid_tokens = []
+        # Ask for unconstrained prediction.
+        continuation = lm.predict_unconstrained(prediction, batch_size)
+        found_violation = False
 
-        for i, token in enumerate(lm.vocabulary()):
-            if is_prefix_valid(completion_engine, completion_points, prediction + token):
-                valid_tokens.append(i)
-            if len(valid_tokens) > 1200:
+        for token in lm.tokenize(continuation):
+            if is_prefix_valid(completion_engine, completion_points,
+                               prediction + lm.get_token(token)):
+                prediction += lm.get_token(token)
+            else:
+                found_violation = True
                 break
-        assert len(valid_tokens) > 0, f"No valid tokens for {repr(prediction)}"
-        predictions, probabilities = lm.predict_token(prediction, valid_tokens, top_k)
-        time.sleep(1.0)
-        if verbose:
-            print(f"current prediction: {prediction}")
-            print(f"Top {min(top_k, len(valid_tokens))} next tokens:")
-            for i in range(len(predictions)):
-                print(f'{i+1}. {lm.vocabulary()[predictions[i]]} {probabilities[i]}')
-        predicted_token = predictions[0]
-        prediction += lm.vocabulary()[predicted_token]
+
+        if found_violation:
+            # Do constrained prediction for next token.
+            valid_tokens = []
+
+            for i, t in enumerate(lm.vocabulary()):
+                if is_prefix_valid(completion_engine, completion_points, prediction + t):
+                    valid_tokens.append(i)
+
+            assert len(valid_tokens) > 0, f"No valid tokens after {repr(prediction)}"
+            predictions, probabilities = lm.predict_token(prediction, valid_tokens, top_k)
+
+            if verbose:
+                print(f"current prediction: {prediction}")
+                print(f"Top {min(top_k, len(valid_tokens))} next tokens:")
+
+                for i, (t_idx, prob) in enumerate(zip(predictions, probabilities)):
+                    print(f'{i+1}. {lm.get_token(t_idx)} {prob}')
+
+            predicted_token = predictions[0]
+            prediction += lm.get_token(predicted_token)
+
     return prediction
 
 
