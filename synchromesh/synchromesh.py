@@ -28,7 +28,7 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
             if is_prefix_valid(completion_engine, completion_points,
                                prediction + lm.get_token(token)):
                 prediction += lm.get_token(token)
-           else:
+            else:
                 found_violation = True
                 if verbose:
                     print(f"found violation: {prediction}")
