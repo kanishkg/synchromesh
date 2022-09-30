@@ -22,13 +22,16 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
         # Ask for unconstrained prediction.
         continuation = lm.predict_unconstrained(prediction, batch_size)
         found_violation = False
-
+        if verbose:
+            print(f"continuation: {repr(continuation)}")
         for token in lm.tokenize(continuation):
             if is_prefix_valid(completion_engine, completion_points,
                                prediction + lm.get_token(token)):
                 prediction += lm.get_token(token)
-            else:
+           else:
                 found_violation = True
+                if verbose:
+                    print(f"found violation: {prediction}")
                 break
 
         if found_violation:
