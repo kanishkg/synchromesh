@@ -3,15 +3,12 @@ from lark.exceptions import UnexpectedCharacters, UnexpectedToken
 
 import regex
 
-EPS_REGEX = regex.compile('')
-
-
 class CompletionEngine:
     def complete(self, prefix: str) -> regex.Pattern:
         raise NotImplementedError()
 
     def is_complete(self, prefix: str) -> bool:
-        return self.complete(prefix) == EPS_REGEX
+        return self.complete(prefix) == regex.compile('')
 
 
 class LarkCompletionEngine(CompletionEngine):

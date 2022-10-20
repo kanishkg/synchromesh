@@ -11,7 +11,7 @@ from synchromesh.language_model import LanguageModel, RandomLanguageModel, OpenA
 # Implements the Constrained Semantic Decoding algorithm.
 def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
                         top_k: int = 1, verbose: bool = True,
-                        batch_size: int = 50) -> str:
+                        batch_size: int = 50, stop_tokens: list[str]=[]) -> str:
     completion_points: dict[str, regex.Pattern] = {}
 
     completion_points[''] = completion_engine.complete('')
@@ -20,7 +20,9 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
 
     while not completion_engine.is_complete(prediction):
         # Ask for unconstrained prediction.
-        continuation = lm.predict_unconstrained(prediction, batch_size)
+        continuation = lm.predict_unconstrained(prediction, batch_size, stop=stop_tokens)
+        # hacky way to filter newlines
+        continuation = continuation.replace('\n', '')
         found_violation = False
         if verbose:
             print(f"continuation: {repr(continuation)}")
@@ -54,7 +56,6 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
 
             predicted_token = predictions[0]
             prediction += lm.get_token(predicted_token)
-
     return prediction
 
 
