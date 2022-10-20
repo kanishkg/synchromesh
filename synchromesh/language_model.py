@@ -51,7 +51,7 @@ class OpenAIModel(LanguageModel):
         self.top_p = top_p
         self.best_of = best_of
         # for gpt series of models
-        if model.startswith("text")
+        if model.startswith("text"):
             url = "https://huggingface.co/gpt2/resolve/main/vocab.json"
             with urlopen(url) as response:
                 self.token_idx = json.loads(response.read())
