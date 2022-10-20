@@ -51,12 +51,20 @@ class OpenAIModel(LanguageModel):
         self.top_p = top_p
         self.best_of = best_of
         # for gpt series of models
-        url = "https://huggingface.co/gpt2/resolve/main/vocab.json"
-        with urlopen(url) as response:
-            self.token_idx = json.loads(response.read())
-        self.token_idx = {s.replace('\u0120', ' '): i
-                          for s, i in self.token_idx.items()}
-        self.vocab = sorted(self.token_idx.keys(), key=lambda k: self.token_idx[k])
+        if model.startswith("text")
+            url = "https://huggingface.co/gpt2/resolve/main/vocab.json"
+            with urlopen(url) as response:
+                self.token_idx = json.loads(response.read())
+            self.token_idx = {s.replace('\u0120', ' '): i
+                            for s, i in self.token_idx.items()}
+            self.vocab = sorted(self.token_idx.keys(), key=lambda k: self.token_idx[k])
+        elif model.startswith("code"):
+            url = "https://huggingface.co/SaulLu/codex-like-tokenizer/raw/main/vocab.json"
+            with urlopen(url) as response:
+                self.token_idx = json.loads(response.read())
+            self.token_idx = {s.replace('\u0120', ' '): i
+                            for s, i in self.token_idx.items()}
+            self.vocab = sorted(self.token_idx.keys(), key=lambda k: self.token_idx[k])
 
     def tokenize(self, s: str) -> list[int]:
         vocab = self.vocabulary()

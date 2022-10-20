@@ -1,3 +1,3 @@
-import synchromesh.synchromesh
+from synchromesh.synchromesh import predict_constrained
 import synchromesh.completion_engine
 import synchromesh.language_model
