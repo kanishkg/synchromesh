@@ -4,14 +4,14 @@ import os
 import regex
 import time
 
-from synchromesh.completion_engine import CompletionEngine, LarkCompletionEngine
-from synchromesh.language_model import LanguageModel, RandomLanguageModel, OpenAIModel
+from completion_engine import CompletionEngine, LarkCompletionEngine
+from language_model import LanguageModel, RandomLanguageModel, OpenAIModel
 
 
 # Implements the Constrained Semantic Decoding algorithm.
 def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
                         top_k: int = 1, verbose: bool = True,
-                        batch_size: int = 50, stop_tokens: list[str]=[]) -> str:
+                        batch_size: int = 50, stop_tokens: list[str]=None) -> str:
     completion_points: dict[str, regex.Pattern] = {}
 
     completion_points[''] = completion_engine.complete('')
@@ -119,23 +119,24 @@ if __name__ == "__main__":
         """
 
     college_grammar = r"""
-        ?request: function " " dept code
-        function: "instructor of" | "students of" | "capacity of" | "department of" | "school of" | "college of"
-        dept:  /[A-Z]{3}/ 
+        ?request: function "of" dept code
+        function: "instructor" | "students" | "capacity" | "department" | "school" | "college"
+        dept:  /[A-Z]{3}/
         code: /[0-9]{3}/
+        %import common.WS
+        %ignore WS
     """
 
-    college_prompt = """Paraphrase the following sentences\n  
-                    Human:who teaches CSE101? \n Bot:instructor of CSE101 \n 
-                    Human:how many students can enroll in PSY456? \n 
-                    Bot:capacity of PSY456 \n 
-                    Human:who teaches BIO433? \n 
+    college_prompt = """Paraphrase the following sentences\n
+                    Human:who teaches CSE101? \n Bot:instructor of CSE101\n
+                    Human:how many students can enroll in PSY456?\n
+                    Bot:capacity of PSY456\n
+                    Human:who teaches BIO433? \n
                     Bot:"""
-    
     num_samples = 1
     api_key = os.environ.get('OPENAI_API_KEY')
     for i in range(num_samples):
-        json_comp_engine = LarkCompletionEngine(college_grammar, 'request')
+        comp_engine = LarkCompletionEngine(college_grammar, 'request', True)
         # rlm = RandomLanguageModel()
-        gpt3 = OpenAIModel(model="text-davinci-002", prompt_template=college_prompt, api_key=api_key, temperature=1.0)
-        print(predict_constrained(json_comp_engine, gpt3, 3, True))
+        gpt3 = OpenAIModel(model="code-davinci-002", prompt_template=college_prompt, api_key=api_key, temperature=1.0)
+        print(predict_constrained(comp_engine, gpt3, 3, True, stop_tokens=["\n"]))
