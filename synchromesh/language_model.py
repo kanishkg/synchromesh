@@ -108,7 +108,7 @@ class OpenAIModel(LanguageModel):
             response_dict = response.choices[0].logprobs.top_logprobs[0]
             for k in sorted(response_dict.keys()):
                 predictions.append(self.token_idx[k])
-                probabilities.append(1.)
+                probabilities.append(response_dict[k])
         
 
         # sort predictions by probability
