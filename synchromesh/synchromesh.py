@@ -31,15 +31,20 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
                                prediction + lm.get_token(token)):
                 prediction += lm.get_token(token)
             else:
+                if completion_engine.is_complete(prediction):
+                    break
                 found_violation = True
                 if verbose:
-                    print(f"found violation: {prediction}")
+                    print(f"found violation at token: {lm.get_token(token)}")
+                    print(f"valid prefix: {prediction}")
                 break
 
         if found_violation:
             # Do constrained prediction for next token.
             valid_tokens = []
 
+            if verbose:
+                print(f"constrained prediction for: {prediction}")
             for i, t in enumerate(lm.vocabulary()):
                 if is_prefix_valid(completion_engine, completion_points, prediction + t):
                     valid_tokens.append(i)
@@ -50,7 +55,6 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
             if verbose:
                 print(f"current prediction: {prediction}")
                 print(f"Top {min(top_k, len(valid_tokens))} next tokens:")
-
                 for i, (t_idx, prob) in enumerate(zip(predictions, probabilities)):
                     print(f'{i+1}. {lm.get_token(t_idx)} {prob}')
 
@@ -66,10 +70,9 @@ def is_prefix_valid(completion_engine: CompletionEngine,
     # 1- Find longest completion point that is a prefix of s.
     longest_completion_point = 0
 
-    for i in range(len(s)):
+    for i in range(len(s)+1):
         if s[:i] in completion_points:
             longest_completion_point = i
-
     # 2- Take the 'remainder'.
     completion_point_regex = completion_points[s[:longest_completion_point]]
     remainder = s[longest_completion_point:]
@@ -127,16 +130,17 @@ if __name__ == "__main__":
         %ignore WS
     """
 
-    college_prompt = """Paraphrase the following sentences\n
-                    Human:who teaches CSE101? \n Bot:instructor of CSE101\n
-                    Human:how many students can enroll in PSY456?\n
-                    Bot:capacity of PSY456\n
-                    Human:who teaches BIO433? \n
-                    Bot:"""
+    college_prompt = """Paraphrase the following sentences
+Human:who teaches CSE101?
+Bot:instructor of CSE101
+Human:how many students can enroll in PSY456?
+Bot:capacity of PSY456
+Human:what's the department of BIO433?
+Bot:"""
     num_samples = 1
     api_key = os.environ.get('OPENAI_API_KEY')
     for i in range(num_samples):
         comp_engine = LarkCompletionEngine(college_grammar, 'request', True)
         # rlm = RandomLanguageModel()
-        gpt3 = OpenAIModel(model="code-davinci-002", prompt_template=college_prompt, api_key=api_key, temperature=1.0)
-        print(predict_constrained(comp_engine, gpt3, 3, True, stop_tokens=["\n"]))
+        gpt3 = OpenAIModel(model="text-curie-001", prompt_template=college_prompt, api_key=api_key, temperature=1.)
+        print(predict_constrained(comp_engine, gpt3, 1, True, stop_tokens=["\n"]))
