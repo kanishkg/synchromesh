@@ -142,5 +142,5 @@ Bot:"""
     for i in range(num_samples):
         comp_engine = LarkCompletionEngine(college_grammar, 'request', True)
         # rlm = RandomLanguageModel()
-        gpt3 = OpenAIModel(model="text-curie-001", prompt_template=college_prompt, api_key=api_key, temperature=1.)
+        gpt3 = OpenAIModel(model="text-ada-001", prompt_template=college_prompt, api_key=api_key, temperature=1.)
         print(predict_constrained(comp_engine, gpt3, 1, True, stop_tokens=["\n"]))

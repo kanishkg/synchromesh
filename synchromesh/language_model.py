@@ -93,14 +93,16 @@ class OpenAIModel(LanguageModel):
         prompt = f"{self.prompt_template}{prefix}"
 
         # select shortest valid tokens if valid tokens are less than 1200; 4 requests
-        if len(valid_tokens) >= 1200:
+        if len(valid_tokens) >= 299*4:
             token_lens = [len(self.get_token(i)) for i in valid_tokens]
             # sort valid tokens by length
             valid_tokens = [x for _, x in sorted(zip(token_lens, valid_tokens))]
-            valid_tokens = valid_tokens[:1199]
+            valid_tokens = valid_tokens[:299*4-1]
 
-        for i in range(len(valid_tokens)//300+1):
-            valid_bias = {k: 100 for k in valid_tokens[i*300:(i+1)*300]}
+        for i in range(len(valid_tokens)//299+1):
+            valid_bias = {k: 100 for k in valid_tokens[i*299:(i+1)*299]}
+            # add a negative bias for the stop token
+            valid_bias[50256] = -100
             # TODO: Using codex leads to a bug
             response = openai.Completion.create(model=self.model, prompt=prompt, logprobs=top_k,
                                                 temperature=self.temperature, top_p=self.top_p,
