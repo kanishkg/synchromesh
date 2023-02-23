@@ -3,16 +3,19 @@
 import os
 import regex
 import time
+import ssl
 
 from completion_engine import CompletionEngine, LarkCompletionEngine
 from language_model import LanguageModel, RandomLanguageModel, OpenAIModel
+from typing import List
+from typing import Dict
 
 
 # Implements the Constrained Semantic Decoding algorithm.
 def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
                         top_k: int = 1, verbose: bool = True,
-                        batch_size: int = 50, stop_tokens: list[str]=None) -> str:
-    completion_points: dict[str, regex.Pattern] = {}
+                        batch_size: int = 50, stop_tokens: List[str]=None) -> str:
+    completion_points: Dict[str, regex.Pattern] = {}
 
     completion_points[''] = completion_engine.complete('')
 
@@ -64,7 +67,7 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
 
 
 def is_prefix_valid(completion_engine: CompletionEngine,
-                    completion_points: dict[str, regex.Pattern],
+                    completion_points: Dict[str, regex.Pattern],
                     s: str) -> bool:
 
     # 1- Find longest completion point that is a prefix of s.
@@ -98,49 +101,60 @@ def is_prefix_valid(completion_engine: CompletionEngine,
     return True
 
 if __name__ == "__main__":
-    json_grammar = r"""
-        ?value: dict
-            | list
-            | string
-            | SIGNED_NUMBER      -> number
-            | "true"             -> true
-            | "false"            -> false
-            | "null"             -> null
-
-        list : "[" [value ("," value)*] "]"
-
-        dict : "{" [pair ("," pair)*] "}"
-        pair : string ":" value
-
-        string : "\"" /[A-Z]{3}/ "\""
-
-        %import common.ESCAPED_STRING
-        %import common.SIGNED_NUMBER
-        %import common.WS
-        %ignore WS
-
-        """
-
-    college_grammar = r"""
-        ?request: function "of" dept code
-        function: "instructor" | "students" | "capacity" | "department" | "school" | "college"
-        dept:  /[A-Z]{3}/
-        code: /[0-9]{3}/
-        %import common.WS
-        %ignore WS
-    """
-
-    college_prompt = """Paraphrase the following sentences
-Human:who teaches CSE101?
-Bot:instructor of CSE101
-Human:how many students can enroll in PSY456?
-Bot:capacity of PSY456
-Human:what's the department of BIO433?
-Bot:"""
+    ssl._create_default_https_context = ssl._create_unverified_context
+#    json_grammar = r"""
+#        ?value: dict
+#            | list
+#            | string
+#            | SIGNED_NUMBER      -> number
+#            | "true"             -> true
+#            | "false"            -> false
+#            | "null"             -> null
+#
+#        list : "[" [value ("," value)*] "]"
+#
+#        dict : "{" [pair ("," pair)*] "}"
+#        pair : string ":" value
+#
+#        string : "\"" /[A-Z]{3}/ "\""
+#
+#        %import common.ESCAPED_STRING
+#        %import common.SIGNED_NUMBER
+#        %import common.WS
+#        %ignore WS
+#
+#        """
+#
+#    college_grammar = r"""
+#        ?request: function "of" dept code
+#        function: "instructor" | "students" | "capacity" | "department" | "school" | "college"
+#        dept:  /[A-Z]{3}/
+#        code: /[0-9]{3}/
+#        %import common.WS
+#        %ignore WS
+#    """
+#
+#    college_prompt = """Paraphrase the following sentences
+#Human:who teaches CSE101?
+#Bot:instructor of CSE101
+#Human:how many students can enroll in PSY456?
+#Bot:capacity of PSY456
+#Human:what's the department of BIO433?
+#Bot:"""
+    code_prompt = '''
+        #Write a Python program to find the third smallest element in an array arr.
+        #1. The input arr contains only floating point numbers.
+        #2. The input arr contains at least 3 elements
+        #Example:
+        #For the input [1, 2, 3] the output would be 1.
+        #For the input [0, 7, 2, 3] the output would be 3.
+        #For the input [-2, -1.5, 0, 3, 4] the output would be 0.
+        def find_third_smallest(arr):
+    '''
     num_samples = 1
     api_key = os.environ.get('OPENAI_API_KEY')
     for i in range(num_samples):
-        comp_engine = LarkCompletionEngine(college_grammar, 'request', True)
+        comp_engine = LarkCompletionEngine(None, '', True)
         # rlm = RandomLanguageModel()
-        gpt3 = OpenAIModel(model="text-ada-001", prompt_template=college_prompt, api_key=api_key, temperature=1.)
+        gpt3 = OpenAIModel(model="code-davinci-002", prompt_template=code_prompt, api_key=api_key, temperature=1.)
         print(predict_constrained(comp_engine, gpt3, 1, True, stop_tokens=["\n"]))

@@ -1,5 +1,6 @@
 from lark import Lark
 from lark.exceptions import UnexpectedCharacters, UnexpectedToken
+from lark.indenter import PythonIndenter
 
 import regex
 
@@ -13,7 +14,10 @@ class CompletionEngine:
 
 class LarkCompletionEngine(CompletionEngine):
     def __init__(self, grammar, start_token, allow_ws: bool):
-        self.parser = Lark(grammar, start=start_token, parser='lalr', regex=True)
+        #self.parser = Lark(grammar, start=start_token, parser='lalr', regex=True)
+        kwargs = dict(postlex=PythonIndenter(), start=['single_input'])
+        #self.parser = Lark.open_from_package('lark', 'python.lark', ['grammars'], parser='lalr')
+        self.parser = Lark.open('python3.lark',parser='lalr', **kwargs)
         self.terminal_dict = self.parser._terminals_dict
         self.allow_ws = allow_ws
 

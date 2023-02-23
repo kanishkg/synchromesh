@@ -5,20 +5,24 @@ import json
 from urllib.request import urlopen
 
 import openai
+from typing import List
+from typing import Tuple
+from typing import Dict
+import time
 
 
 class LanguageModel:
-    def vocabulary(self) -> list[str]:
+    def vocabulary(self) -> List[str]:
         raise NotImplementedError()
 
-    def predict_tokens(self, prefix: str, n: int) -> list[int]:
+    def predict_tokens(self, prefix: str, n: int) -> List[int]:
         raise NotImplementedError()
 
-    def predict_token(self, prefix: str, valid_tokens: list[int], top_k: int = 1) -> tuple[list[int], list[float]]:
+    def predict_token(self, prefix: str, valid_tokens: List[int], top_k: int = 1) -> Tuple[List[int], List[float]]:
         'Given prefix (prompt + already generated code), predicts next token'
         raise NotImplementedError()
 
-    def tokenize(self, s: str) -> list[int]:
+    def tokenize(self, s: str) -> List[int]:
         raise NotImplementedError()
 
     def get_token(self, i: int) -> str:
@@ -29,10 +33,10 @@ class LanguageModel:
 
 
 class RandomLanguageModel(LanguageModel):
-    def vocabulary(self) -> list[str]:
-        return list(map(chr, range(128)))
+    def vocabulary(self) -> List[str]:
+        return List(map(chr, range(128)))
 
-    def predict_token(self, prefix: str, valid_tokens: list[int], top_k: int = 1) -> tuple[list[int], list[float]]:
+    def predict_token(self, prefix: str, valid_tokens: List[int], top_k: int = 1) -> Tuple[List[int], List[float]]:
         predictions = random.sample(valid_tokens, min(top_k, len(valid_tokens)))
         probabilities = [1.0 / len(predictions)] * len(predictions)
         return predictions, probabilities
@@ -66,7 +70,7 @@ class OpenAIModel(LanguageModel):
                             for s, i in self.token_idx.items()}
             self.vocab = sorted(self.token_idx.keys(), key=lambda k: self.token_idx[k])
 
-    def tokenize(self, s: str) -> list[int]:
+    def tokenize(self, s: str) -> List[int]:
         vocab = self.vocabulary()
         tokens = []
 
@@ -81,11 +85,11 @@ class OpenAIModel(LanguageModel):
 
         return tokens
 
-    def vocabulary(self) -> list[str]:
+    def vocabulary(self) -> List[str]:
         # sort keys by value, then return the keys
         return self.vocab
 
-    def predict_token(self, prefix: str, valid_tokens: list[int], top_k: int = 1) -> tuple[list[int], list[float]]:
+    def predict_token(self, prefix: str, valid_tokens: List[int], top_k: int = 1) -> Tuple[List[int], List[float]]:
         # change bias of valid tokens to make them more likely
         # bias can only be set for 300 tokens at a time
         assert top_k <= 5, "top_k must be less than or equal to 5"
@@ -122,6 +126,7 @@ class OpenAIModel(LanguageModel):
         return  predictions, probabilities
 
     def predict_unconstrained(self, prefix, max_tokens, stop=None):
+        time.sleep(0.5)
         prompt = f"{self.prompt_template}{prefix}"
         response = openai.Completion.create(model=self.model, prompt=prompt,
                                             temperature=self.temperature, top_p=self.top_p,
