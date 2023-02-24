@@ -1,0 +1,5 @@
+def third_smallest(arr):
+    unique_nums = sorted(set(arr))
+    if len(unique_nums) < 3:
+        return None
+    return unique_nums[2]

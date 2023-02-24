@@ -1,0 +1,13 @@
+def third_smallest(arr):
+    smallest = second_smallest = third_smallest = float('inf')
+    for num in arr:
+        if num < smallest:
+            third_smallest = second_smallest
+            second_smallest = smallest
+            smallest = num
+        elif num < second_smallest:
+            third_smallest = second_smallest
+            second_smallest = num
+        elif num < third_smallest:
+            third_smallest = num
+    return third_smallest
