@@ -2,9 +2,11 @@
 
 import random
 import json
+import os
 from urllib.request import urlopen
 
 import openai
+import transformers
 
 
 class LanguageModel:
@@ -40,6 +42,14 @@ class RandomLanguageModel(LanguageModel):
     def predict_unconstrained(self, prefix, max_tokens, stop=None):
         return ''.join(random.choices(self.vocabulary(), k=max_tokens))
 
+
+def download_or_use_cached(url, path):
+    if not os.path.exists(path):
+        with urlopen(url) as response:
+            with open(path, 'wb') as f:
+                f.write(response.read())
+    return path
+
 class OpenAIModel(LanguageModel):
     def __init__(self, model: str, prompt_template: str, api_key: str,
                  temperature: float = 0.0, top_p: float = 1.0, best_of: int = 1) -> None:
@@ -52,34 +62,25 @@ class OpenAIModel(LanguageModel):
         self.best_of = best_of
         # for gpt series of models
         if model.startswith("text"):
-            url = "https://huggingface.co/gpt2/resolve/main/vocab.json"
-            with urlopen(url) as response:
-                self.token_idx = json.loads(response.read())
-            self.token_idx = {s.replace('\u0120', ' '): i
-                            for s, i in self.token_idx.items()}
-            self.vocab = sorted(self.token_idx.keys(), key=lambda k: self.token_idx[k])
+            self.tokenizer = transformers.GPT2Tokenizer.from_pretrained('gpt2')
         elif model.startswith("code"):
-            url = "https://huggingface.co/SaulLu/codex-like-tokenizer/raw/main/vocab.json"
-            with urlopen(url) as response:
-                self.token_idx = json.loads(response.read())
-            self.token_idx = {s.replace('\u0120', ' '): i
-                            for s, i in self.token_idx.items()}
-            self.vocab = sorted(self.token_idx.keys(), key=lambda k: self.token_idx[k])
+            self.tokenizer = transformers.GPT2Tokenizer(
+                vocab_file=download_or_use_cached(
+                    "https://huggingface.co/SaulLu/codex-like-tokenizer/raw/main/vocab.json",
+                    '.codex-vocab.json'),
+                merges_file=download_or_use_cached(
+                    "https://huggingface.co/SaulLu/codex-like-tokenizer/raw/main/merges.txt",
+                    '.codex-merges.txt')
+                )
+
+        # self.vocab is a list of readable token strings (e.g., ' hello' and '\n')
+        # sorted by their token IDs (so self.vocab[0] is the first token, etc).
+        self.vocab = [v for k, v in
+                      sorted([(t_id, self.tokenizer.decode([t_id]))
+                              for _, t_id in self.tokenizer.get_vocab().items()])]
 
     def tokenize(self, s: str) -> list[int]:
-        vocab = self.vocabulary()
-        tokens = []
-
-        while s:
-            # Find longest token that is a prefix of s.
-            l = 1
-            while l <= len(s) and s[:l] in self.token_idx:
-                l += 1
-            # Add it to tokens, remove from s.
-            tokens.append(self.token_idx[s[:(l - 1)]])
-            s = s[(l - 1):]
-
-        return tokens
+        return self.tokenizer.encode(s)
 
     def vocabulary(self) -> list[str]:
         # sort keys by value, then return the keys
@@ -91,6 +92,28 @@ class OpenAIModel(LanguageModel):
         assert top_k <= 5, "top_k must be less than or equal to 5"
         predictions, probabilities = [], []
         prompt = f"{self.prompt_template}{prefix}"
+
+        # Only keep tokens that cannot be extended. This is crucial, because
+        # the model has *never* seen a sequence of non-maximal tokens in its
+        # input, and if we force it to output a sequence of maximal tokens,
+        # a logit bias is often not enough to constrain it (it outputs near
+        # zero probability for the valid tokens even after adding 100 to
+        # the logits).
+        #
+        # Longer explanation:
+        # Suppose we want to force the model to output
+        # the number 20302. This would be BPE-tokenized as 20 | 302.
+        # Suppose we let the model output '2' alone. We succeed at that,
+        # but not we need the model to output the token '0' alone. This
+        # is the problem: '2' and '0' were seen exactly 0 times during
+        # training, since the tokenizer will never emit this sequence of
+        # tokens. Hence, the model puts near 0 probability to predicting '0'
+        # after predicting '2'. By not letting it output non-maximal tokens
+        # in the first place, we avoid this issue.
+        valid_tokens = filter_maximal_tokens(valid_tokens, self.tokenizer)
+
+        if len(valid_tokens) == 1:
+            return valid_tokens, [0.0]
 
         # select shortest valid tokens if valid tokens are less than 1200; 4 requests
         if len(valid_tokens) >= 299*4:
@@ -107,23 +130,51 @@ class OpenAIModel(LanguageModel):
             response = openai.Completion.create(model=self.model, prompt=prompt, logprobs=top_k,
                                                 temperature=self.temperature, top_p=self.top_p,
                                                 best_of=self.best_of, max_tokens=1, logit_bias=valid_bias)
+
             response_dict = response.choices[0].logprobs.top_logprobs[0]
+
             for k in sorted(response_dict.keys()):
-                predictions.append(self.token_idx[k])
+                predictions.append(self.tokenizer.encode(k)[0])
                 probabilities.append(response_dict[k])
-        
 
         # sort predictions by probability
         predictions = [c for _, c in sorted(zip(probabilities, predictions), key=lambda x: x[0], reverse=True)]
         probabilities = sorted(probabilities, reverse=True)
         predictions = predictions[:min(top_k, len(predictions))]
-        predictions = [c for c in predictions]
+        predictions = list(predictions)
         probabilities = probabilities[:min(top_k, len(probabilities))]
-        return  predictions, probabilities
+        breakpoint()
+        return predictions, probabilities
 
     def predict_unconstrained(self, prefix, max_tokens, stop=None):
         prompt = f"{self.prompt_template}{prefix}"
         response = openai.Completion.create(model=self.model, prompt=prompt,
                                             temperature=self.temperature, top_p=self.top_p,
+                                            logit_bias={50256: -100},
                                             best_of=self.best_of, max_tokens=max_tokens, stop=stop)
         return response.choices[0].text
+
+
+def filter_maximal_tokens(tokens: list[int], tokenizer) -> list[int]:
+    '''Given a list of tokens, only keep the maximal ones.
+
+    This takes quadratic time; might be slow with overly long lists.
+    NOTE: This can be made linear-time by inserting all tokens in a Trie
+    and then only taking the leaves.
+    '''
+
+    token_strs = list(map(tokenizer.decode, tokens))
+    result = []
+
+    for i in range(len(tokens)):
+        is_maximal = True
+
+        for j in range(len(tokens)):
+            if i != j and token_strs[j].startswith(token_strs[i]):
+                is_maximal = False
+                break
+
+        if is_maximal:
+            result.append(tokens[i])
+
+    return result

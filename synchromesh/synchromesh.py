@@ -22,10 +22,13 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
         # Ask for unconstrained prediction.
         continuation = lm.predict_unconstrained(prediction, batch_size, stop=stop_tokens)
         # hacky way to filter newlines
-        continuation = continuation.replace('\n', '')
         found_violation = False
+
         if verbose:
-            print(f"continuation: {repr(continuation)}")
+            pass
+            #print(f"continuation: {repr(continuation)}")
+            # breakpoint()
+
         for token in lm.tokenize(continuation):
             if is_prefix_valid(completion_engine, completion_points,
                                prediction + lm.get_token(token)):
@@ -35,8 +38,9 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
                     break
                 found_violation = True
                 if verbose:
-                    print(f"found violation at token: {lm.get_token(token)}")
-                    print(f"valid prefix: {prediction}")
+                    # print(f"found violation at token: {lm.get_token(token)}")
+                    # print(f"valid prefix: {prediction}")
+                    pass
                 break
 
         if found_violation:
@@ -44,7 +48,9 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
             valid_tokens = []
 
             if verbose:
-                print(f"constrained prediction for: {prediction}")
+                # print(f"constrained prediction for: {prediction}")
+                pass
+
             for i, t in enumerate(lm.vocabulary()):
                 if is_prefix_valid(completion_engine, completion_points, prediction + t):
                     valid_tokens.append(i)
@@ -53,10 +59,11 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
             predictions, probabilities = lm.predict_token(prediction, valid_tokens, top_k)
 
             if verbose:
-                print(f"current prediction: {prediction}")
-                print(f"Top {min(top_k, len(valid_tokens))} next tokens:")
+                # print(f"current prediction: {prediction}")
+                # print(f"Top {min(top_k, len(valid_tokens))} next tokens:")
                 for i, (t_idx, prob) in enumerate(zip(predictions, probabilities)):
-                    print(f'{i+1}. {lm.get_token(t_idx)} {prob}')
+                    pass
+                    # print(f'{i+1}. {lm.get_token(t_idx)} {prob}')
 
             predicted_token = predictions[0]
             prediction += lm.get_token(predicted_token)
