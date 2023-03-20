@@ -10,7 +10,7 @@ from language_model import LanguageModel, RandomLanguageModel, OpenAIModel
 
 # Implements the Constrained Semantic Decoding algorithm.
 def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
-                        top_k: int = 1, verbose: bool = True,
+                        top_k: int = 1, verbose: bool = False,
                         batch_size: int = 50, stop_tokens: list[str]=None) -> str:
     completion_points: dict[str, regex.Pattern] = {}
 
@@ -21,13 +21,10 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
     while not completion_engine.is_complete(prediction):
         # Ask for unconstrained prediction.
         continuation = lm.predict_unconstrained(prediction, batch_size, stop=stop_tokens)
-        # hacky way to filter newlines
         found_violation = False
 
         if verbose:
-            pass
-            #print(f"continuation: {repr(continuation)}")
-            # breakpoint()
+            print(f"continuation: {repr(continuation)}")
 
         for token in lm.tokenize(continuation):
             if is_prefix_valid(completion_engine, completion_points,
@@ -38,9 +35,8 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
                     break
                 found_violation = True
                 if verbose:
-                    # print(f"found violation at token: {lm.get_token(token)}")
-                    # print(f"valid prefix: {prediction}")
-                    pass
+                    print(f"found violation at token: {lm.get_token(token)}")
+                    print(f"valid prefix: {prediction}")
                 break
 
         if found_violation:
@@ -48,8 +44,7 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
             valid_tokens = []
 
             if verbose:
-                # print(f"constrained prediction for: {prediction}")
-                pass
+                print(f"constrained prediction for: {prediction}")
 
             for i, t in enumerate(lm.vocabulary()):
                 if is_prefix_valid(completion_engine, completion_points, prediction + t):
@@ -59,11 +54,10 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
             predictions, probabilities = lm.predict_token(prediction, valid_tokens, top_k)
 
             if verbose:
-                # print(f"current prediction: {prediction}")
-                # print(f"Top {min(top_k, len(valid_tokens))} next tokens:")
+                print(f"current prediction: {prediction}")
+                print(f"Top {min(top_k, len(valid_tokens))} next tokens:")
                 for i, (t_idx, prob) in enumerate(zip(predictions, probabilities)):
-                    pass
-                    # print(f'{i+1}. {lm.get_token(t_idx)} {prob}')
+                    print(f'{i+1}. {lm.get_token(t_idx)} {prob}')
 
             predicted_token = predictions[0]
             prediction += lm.get_token(predicted_token)
@@ -92,9 +86,6 @@ def is_prefix_valid(completion_engine: CompletionEngine,
             if completion_point_regex.fullmatch(remainder[:i]):
                 # We found another completion point, reduce the problem and call recursively.
                 new_completion_point = s[:longest_completion_point] + remainder[:i]
-                # check if this base case is correct. (this is the case for the terminal symbol)
-                if completion_engine.is_complete(new_completion_point):
-                    return False
                 new_completion_point_regex = completion_engine.complete(new_completion_point)
                 completion_points[new_completion_point] = new_completion_point_regex
                 return is_prefix_valid(completion_engine, completion_points, s)

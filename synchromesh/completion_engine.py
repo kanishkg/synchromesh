@@ -12,8 +12,9 @@ class CompletionEngine:
 
 
 class LarkCompletionEngine(CompletionEngine):
-    def __init__(self, grammar, start_token, allow_ws: bool):
-        self.parser = Lark(grammar, start=start_token, parser='lalr', regex=True)
+    def __init__(self, grammar, start_token, allow_ws: bool = True):
+        self.parser = Lark(grammar, start=start_token, parser='lalr',
+                           regex=True)
         self.terminal_dict = self.parser._terminals_dict
         self.allow_ws = allow_ws
 
@@ -21,22 +22,21 @@ class LarkCompletionEngine(CompletionEngine):
         interactive_parser = self.parser.parse_interactive(prefix)
         token = None
         try:
-            for token in interactive_parser.parser_state.lexer.lex(interactive_parser.parser_state): 
+            for token in interactive_parser.parser_state.lexer.lex(
+                    interactive_parser.parser_state):
                 interactive_parser.parser_state.feed_token(token)
-        except UnexpectedCharacters as e:
-            pass
-        except UnexpectedToken as e:
+        except (UnexpectedCharacters, UnexpectedToken):
             pass
         valid_tokens = interactive_parser.accepts()
         # get the regex for the valid tokens
-        valid_regex = [f'{self.terminal_dict[t].pattern.to_regexp()}' for t in valid_tokens if t!='$END']
+        valid_regex = [f'{self.terminal_dict[t].pattern.to_regexp()}'
+                       for t in valid_tokens
+                       if t != '$END']
 
         if valid_regex and self.allow_ws:
             valid_regex.append("\\s+")
 
-        valid_regex = '|'.join(valid_regex)
-        valid_regex = regex.compile(valid_regex)
-        return valid_regex
+        return regex.compile('|'.join(valid_regex))
 
 
 def main():
@@ -72,6 +72,6 @@ def main():
     # end_token = Token.new_borrow_pos('$END', '', token) if token else Token('$END', '', 0, 1, 1)
     # interactive_parser.parser_state.feed_token(end_token, True)
 
-    
+
 if __name__ == '__main__':
     main()

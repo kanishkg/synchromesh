@@ -50,16 +50,23 @@ def download_or_use_cached(url, path):
                 f.write(response.read())
     return path
 
+
 class OpenAIModel(LanguageModel):
-    def __init__(self, model: str, prompt_template: str, api_key: str,
-                 temperature: float = 0.0, top_p: float = 1.0, best_of: int = 1) -> None:
+    def __init__(self, model: str, prompt_template: str, api_key: str = None,
+                 temperature: float = 0.0, top_p: float = 1.0, best_of: int = 1,
+                 before_prediction_hook=lambda: None) -> None:
         super().__init__()
-        openai.api_key = api_key
+
+        if api_key:
+            openai.api_key = api_key
+
         self.prompt_template = prompt_template
         self.model = model
         self.temperature = temperature
         self.top_p = top_p
         self.best_of = best_of
+        self._before_prediction_hook = before_prediction_hook
+
         # for gpt series of models
         if model.startswith("text"):
             self.tokenizer = transformers.GPT2Tokenizer.from_pretrained('gpt2')
@@ -104,12 +111,13 @@ class OpenAIModel(LanguageModel):
         # Suppose we want to force the model to output
         # the number 20302. This would be BPE-tokenized as 20 | 302.
         # Suppose we let the model output '2' alone. We succeed at that,
-        # but not we need the model to output the token '0' alone. This
-        # is the problem: '2' and '0' were seen exactly 0 times during
-        # training, since the tokenizer will never emit this sequence of
-        # tokens. Hence, the model puts near 0 probability to predicting '0'
-        # after predicting '2'. By not letting it output non-maximal tokens
-        # in the first place, we avoid this issue.
+        # but now we need the model to output the token '0' alone. Here
+        # we hit the problem: the sequence of tokens '2' followed by '0'
+        # was seen exactly 0 times during training, since the tokenizer
+        # will never emit this sequence (it will instead use the '20' token).
+        # Hence, the model puts near 0 probability to predicting '0'
+        # after predicting '2'. The solution is to only let the model
+        # output maximal valid tokens, avoiding this issue.
         valid_tokens = filter_maximal_tokens(valid_tokens, self.tokenizer)
 
         if len(valid_tokens) == 1:
@@ -126,7 +134,7 @@ class OpenAIModel(LanguageModel):
             valid_bias = {k: 100 for k in valid_tokens[i*299:(i+1)*299]}
             # add a negative bias for the stop token
             valid_bias[50256] = -100
-            # TODO: Using codex leads to a bug
+            self._before_prediction_hook()
             response = openai.Completion.create(model=self.model, prompt=prompt, logprobs=top_k,
                                                 temperature=self.temperature, top_p=self.top_p,
                                                 best_of=self.best_of, max_tokens=1, logit_bias=valid_bias)
@@ -143,11 +151,11 @@ class OpenAIModel(LanguageModel):
         predictions = predictions[:min(top_k, len(predictions))]
         predictions = list(predictions)
         probabilities = probabilities[:min(top_k, len(probabilities))]
-        breakpoint()
         return predictions, probabilities
 
     def predict_unconstrained(self, prefix, max_tokens, stop=None):
         prompt = f"{self.prompt_template}{prefix}"
+        self._before_prediction_hook()
         response = openai.Completion.create(model=self.model, prompt=prompt,
                                             temperature=self.temperature, top_p=self.top_p,
                                             logit_bias={50256: -100},
