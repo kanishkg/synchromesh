@@ -1,1 +1,3 @@
 regex
+lark
+openai
