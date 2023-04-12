@@ -156,11 +156,35 @@ class OpenAIModel(LanguageModel):
     def predict_unconstrained(self, prefix, max_tokens, stop=None):
         prompt = f"{self.prompt_template}{prefix}"
         self._before_prediction_hook()
+
+        model_limit = get_token_limit(self.model)
+        prompt_tokens = len(self.tokenizer.encode(prompt))
+
         response = openai.Completion.create(model=self.model, prompt=prompt,
                                             temperature=self.temperature, top_p=self.top_p,
                                             logit_bias={50256: -100},
-                                            best_of=self.best_of, max_tokens=max_tokens, stop=stop)
+                                            best_of=self.best_of,
+                                            max_tokens=min(
+                                                max_tokens,
+                                                model_limit - prompt_tokens - 1),
+                                            stop=stop)
         return response.choices[0].text
+
+# Source: https://platform.openai.com/docs/models/
+def get_token_limit(model_name):
+    if 'code-davinci' in model_name:
+        return 8001
+    elif 'code-cushman' in model_name:
+        return 2048
+    elif 'text-davinci-00' in model_name:
+        return 4097
+    elif 'curie' in model_name or 'babbage' in model_name or 'ada' in model_name:
+        return 2049
+    elif 'gpt-4' in model_name:
+        return 8192
+    elif 'gpt-3.5-turbo' in model_name:
+        return 4096
+    raise ValueError('Unknown model ' + model_name)
 
 
 def filter_maximal_tokens(tokens: list[int], tokenizer) -> list[int]:
