@@ -71,7 +71,7 @@ class StreamingCSD:
 
 # Implements the Constrained Semantic Decoding algorithm.
 def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
-                        top_k: int = 1, verbose: bool = False,
+                        top_k: int = 1, verbose: bool = True,
                         batch_size: int = 50, stop_tokens: list[str]=None) -> str:
     completion_points: dict[str, regex.Pattern] = {}
 
@@ -83,11 +83,21 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
 
     while not completion_engine.is_complete(prediction):
         # Ask for unconstrained prediction.
+        if verbose:
+            print('Prefix:', prediction)
+
         continuation = lm.predict_unconstrained(prediction, batch_size, stop=stop_tokens)
         found_violation = False
 
         if verbose:
-            print(f"continuation: {repr(continuation)}")
+            print('Continuation:', continuation)
+
+        if not continuation:
+            # HACK: LM really thinks is done. This will not make progress.
+            # Trusting it for now.
+            if verbose:
+                print('Empty continuation. Stopping early because model refuses to keep going.')
+            break
 
         for token in lm.tokenize(continuation):
             if is_prefix_valid(completion_engine, completion_points,
@@ -98,14 +108,15 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
                     break
                 found_violation = True
                 if verbose:
-                    print(f"found violation at token: {lm.get_token(token)}")
-                    print(f"valid prefix: {prediction}")
+                    print(f"Found violation at token: {repr(lm.get_token(token))}")
+                    print(f"Valid prefix: {prediction}")
                 break
 
         if found_violation:
             # Do constrained prediction for next token.
             if verbose:
-                print(f"constrained prediction for: {prediction}")
+                print(f"Constrained prediction for: {prediction}")
+                print('Determining valid tokens...')
 
             valid_tokens = trie.antimonotonic_filter(
                 lambda t: is_prefix_valid(completion_engine,
@@ -113,19 +124,17 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
                                           prediction + t)
             )
 
+            if verbose:
+                print('Done:', len(valid_tokens), 'tokens.')
+
             assert len(valid_tokens) > 0, f"No valid tokens after {repr(prediction)}"
             predictions, probabilities = lm.predict_token(prediction,
                                                           [i for _, i in valid_tokens],
                                                           top_k)
 
-            if verbose:
-                print(f"current prediction: {prediction}")
-                print(f"Top {min(top_k, len(valid_tokens))} next tokens:")
-                for i, (t_idx, prob) in enumerate(zip(predictions, probabilities)):
-                    print(f'{i+1}. {lm.get_token(t_idx)} {prob}')
-
             predicted_token = predictions[0]
             prediction += lm.get_token(predicted_token)
+
     return prediction
 
 
