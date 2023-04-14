@@ -34,13 +34,16 @@ class RandomLanguageModel(LanguageModel):
     def vocabulary(self) -> list[str]:
         return list(map(chr, range(128)))
 
+    def tokenize(self, s: str) -> list[int]:
+        return list(map(ord, s))
+
     def predict_token(self, prefix: str, valid_tokens: list[int], top_k: int = 1) -> tuple[list[int], list[float]]:
         predictions = random.sample(valid_tokens, min(top_k, len(valid_tokens)))
         probabilities = [1.0 / len(predictions)] * len(predictions)
         return predictions, probabilities
 
     def predict_unconstrained(self, prefix, max_tokens, stop=None):
-        return ''.join(random.choices(self.vocabulary(), k=max_tokens))
+        return ''.join(random.choices(self.vocabulary(), k=max_tokens)), [0.0]
 
 
 def download_or_use_cached(url, path):

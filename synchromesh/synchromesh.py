@@ -6,6 +6,67 @@ import time
 
 from completion_engine import CompletionEngine, LarkCompletionEngine
 from language_model import LanguageModel, RandomLanguageModel, OpenAIModel
+import trie
+
+
+class StreamingCSD:
+    '''Streaming implementation of Constrained Semantic Decoding
+
+    Use this if you want full control when sampling from the model
+    (e.g., if you're using Hugging Face models, not OpenAI).
+
+    This is the suggested approach:
+
+    While not done sampling:
+    - Predict distribution over next token from the language model.
+    - Sample a token.
+    - Check if can_token_follow returns True.
+    -- If so, call feed_prediction and continue.
+    -- Otherwise, call get_valid_tokens(), sample from that support set,
+       then feed_prediction and continue.
+
+    The reason for this is that can_token_follow is more efficient
+    than get_valid_tokens (which iterates over the vocabulary, although
+    with very heavy pruning). Thus, the fewer calls to get_valid_tokens()
+    you can do, the better.
+    '''
+
+    def __init__(self,
+                 completion_engine: CompletionEngine,
+                 lm_vocabulary: list[str]):
+        self._trie = trie.Trie.from_vocabulary(lm_vocabulary)
+        self._vocab = lm_vocabulary
+        self._completion_engine = completion_engine
+        self._completion_points: dict[str, regex.Pattern] = {}
+        self._completion_points[''] = completion_engine.complete('')
+
+        self.init_stream()
+
+    def init_stream(self):
+        self._prefix_tokens = []
+        self._prefix_str = ''
+
+    def can_token_follow(self, t: int):
+        return is_prefix_valid(self._completion_engine,
+                               self._completion_points,
+                               self._prefix_str + self._vocab[t])
+
+    def feed_prediction(self, t: int):
+        self._prefix_tokens.append(t)
+        self._prefix_str += self._vocab[t]
+
+    def get_valid_tokens(self) -> list[int]:
+        return self._trie.antimonotonic_filter(
+                lambda t: is_prefix_valid(self._completion_engine,
+                                          self._completion_points,
+                                          self._prefix_str + t)
+            )
+
+    def get_current_prediction(self) -> str:
+        return self._prefix_str
+
+    def get_current_prediction_tokens(self) -> list[int]:
+        return self._prefix_tokens
 
 
 # Implements the Constrained Semantic Decoding algorithm.
@@ -15,6 +76,8 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
     completion_points: dict[str, regex.Pattern] = {}
 
     completion_points[''] = completion_engine.complete('')
+
+    token_trie = trie.Trie.from_vocabulary(lm.vocabulary())
 
     prediction = ''
 
@@ -41,17 +104,19 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
 
         if found_violation:
             # Do constrained prediction for next token.
-            valid_tokens = []
-
             if verbose:
                 print(f"constrained prediction for: {prediction}")
 
-            for i, t in enumerate(lm.vocabulary()):
-                if is_prefix_valid(completion_engine, completion_points, prediction + t):
-                    valid_tokens.append(i)
+            valid_tokens = trie.antimonotonic_filter(
+                lambda t: is_prefix_valid(completion_engine,
+                                          completion_points,
+                                          prediction + t)
+            )
 
             assert len(valid_tokens) > 0, f"No valid tokens after {repr(prediction)}"
-            predictions, probabilities = lm.predict_token(prediction, valid_tokens, top_k)
+            predictions, probabilities = lm.predict_token(prediction,
+                                                          [i for _, i in valid_tokens],
+                                                          top_k)
 
             if verbose:
                 print(f"current prediction: {prediction}")
@@ -95,7 +160,8 @@ def is_prefix_valid(completion_engine: CompletionEngine,
     #    Case c- Got to the end with no violations, return True
     return True
 
-if __name__ == "__main__":
+
+def test_streaming_csd():
     json_grammar = r"""
         ?value: dict
             | list
@@ -116,9 +182,40 @@ if __name__ == "__main__":
         %import common.SIGNED_NUMBER
         %import common.WS
         %ignore WS
-
         """
 
+    comp_engine = LarkCompletionEngine(json_grammar, 'dict', True)
+    lm = RandomLanguageModel()
+
+    csd = StreamingCSD(comp_engine, lm.vocabulary())
+
+    import time
+    start_time = time.time()
+
+    while not comp_engine.is_complete(csd.get_current_prediction()):
+        continuation, _ = lm.predict_unconstrained(csd.get_current_prediction(),
+                                             max_tokens=1)
+        tokens = lm.tokenize(continuation)
+
+        if csd.can_token_follow(tokens[0]):
+            csd.feed_prediction(tokens[0])
+        else:
+            valid_tokens = csd.get_valid_tokens()
+            tokens, _ = lm.predict_token(csd.get_current_prediction(),
+                                         valid_tokens)
+            csd.feed_prediction(tokens[0])
+
+        s = csd.get_current_prediction()
+
+        if len(s) > 500:
+            break
+
+    delta = time.time() - start_time
+
+    print('Predicted:', repr(csd.get_current_prediction()))
+    print('Throughput:', len(csd.get_current_prediction_tokens()) / delta, 'tokens/s')
+
+def test_college_grammar_csd():
     college_grammar = r"""
         ?request: function "of" dept code
         function: "instructor" | "students" | "capacity" | "department" | "school" | "college"
@@ -142,3 +239,7 @@ Bot:"""
         # rlm = RandomLanguageModel()
         gpt3 = OpenAIModel(model="text-ada-001", prompt_template=college_prompt, api_key=api_key, temperature=1.)
         print(predict_constrained(comp_engine, gpt3, 1, True, stop_tokens=["\n"]))
+
+
+if __name__ == '__main__':
+    test_streaming_csd()
