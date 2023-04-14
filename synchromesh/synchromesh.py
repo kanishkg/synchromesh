@@ -118,7 +118,7 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
                 print(f"Constrained prediction for: {prediction}")
                 print('Determining valid tokens...')
 
-            valid_tokens = trie.antimonotonic_filter(
+            valid_tokens = token_trie.antimonotonic_filter(
                 lambda t: is_prefix_valid(completion_engine,
                                           completion_points,
                                           prediction + t)
@@ -129,7 +129,7 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
 
             assert len(valid_tokens) > 0, f"No valid tokens after {repr(prediction)}"
             predictions, probabilities = lm.predict_token(prediction,
-                                                          [i for _, i in valid_tokens],
+                                                          valid_tokens,
                                                           top_k)
 
             predicted_token = predictions[0]

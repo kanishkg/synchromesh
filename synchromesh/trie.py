@@ -36,7 +36,7 @@ class Trie:
             children_values.extend(c.antimonotonic_filter(predicate, key + k))
 
         # Only return maximal elements.
-        if len(children_values):
+        if len(children_values) or self.value is None:
             return children_values
 
         return [self.value]
