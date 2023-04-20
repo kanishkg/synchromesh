@@ -54,7 +54,7 @@ def download_or_use_cached(url, path):
     return path
 
 class HuggingFaceModel(LanguageModel):
-    def __init__(self, model: str, prompt_template: str, api_key: str = None,
+    def __init__(self, model, prompt_template: str, api_key: str = None,
                  temperature: float = 0.0, top_p: float = 1.0, best_of: int = 1,
                  before_prediction_hook=lambda: None, tokenizer=None, device='cuda') -> None:
         super().__init__()
