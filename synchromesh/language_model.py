@@ -75,12 +75,14 @@ class HuggingFaceModel(LanguageModel):
                               for _, t_id in self.tokenizer.get_vocab().items()])]
 
         # HACK: Is there a better way to know if a token has a prefix space?
-        for i in range(len(self.vocab)):
-            t = self.vocab[i]
-            if 2*len(t) != len(self.tokenizer.decode([i, i], add_special_tokens=False)):
-                self.vocab[i] = ' ' + t
-            if t == '':
-                self.vocab[i] = ' '
+        # We should only need this for LlamaTokenizer.
+        if isinstance(self.tokenizer, transformers.LlamaTokenizer):
+            for i in range(len(self.vocab)):
+                t = self.vocab[i]
+                if 2*len(t) != len(self.tokenizer.decode([i, i], add_special_tokens=False)):
+                    self.vocab[i] = ' ' + t
+                if t == '':
+                    self.vocab[i] = ' '
 
     def tokenize(self, s: str) -> list[int]:
         return self.tokenizer.encode(s, add_special_tokens=False)
@@ -102,13 +104,13 @@ class HuggingFaceModel(LanguageModel):
             valid_tokens_mask[valid_tokens] = True
             logits = logits.squeeze(0)
             filtered_logits = logits.softmax(dim=-1)
-            logits[~valid_tokens_mask] = 0
+            filtered_logits[~valid_tokens_mask] = 0
             filtered_logits = filtered_logits / filtered_logits.sum()
 
         top_values, top_indices = torch.topk(filtered_logits, top_k)
         top_indices = top_indices.tolist()
         top_values = top_values.log().tolist()
-
+        
         return top_indices, top_values
 
     def predict_unconstrained(self, prefix: str, max_tokens: int, stop=None):
@@ -139,6 +141,10 @@ class HuggingFaceModel(LanguageModel):
             # remove the prompt
             output = output[:, len(input_ids[0]):]
         detokenized = self.tokenizer.decode(output[0])
+        for stop_token in stop:
+            if stop_token in detokenized:
+                # split on the first stop token
+                detokenized = detokenized.split(stop_token)[0]
         return detokenized
 
 class OpenAIModel(LanguageModel):

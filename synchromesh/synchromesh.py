@@ -71,7 +71,7 @@ class StreamingCSD:
 
 # Implements the Constrained Semantic Decoding algorithm.
 def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
-                        top_k: int = 1, verbose: bool = True,
+                        top_k: int = 1, verbose: bool = False,
                         batch_size: int = 50, stop_tokens: list[str]=None) -> str:
     completion_points: dict[str, regex.Pattern] = {}
 
@@ -248,6 +248,8 @@ Bot:"""
         # rlm = RandomLanguageModel()
         gpt3 = OpenAIModel(model="text-ada-001", prompt_template=college_prompt, api_key=api_key, temperature=1.)
         print(predict_constrained(comp_engine, gpt3, 1, True, stop_tokens=["\n"]))
+        print("?????")
+        breakpoint()
 
 
 if __name__ == '__main__':
