@@ -72,7 +72,8 @@ class StreamingCSD:
 # Implements the Constrained Semantic Decoding algorithm.
 def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
                         top_k: int = 1, verbose: bool = False,
-                        batch_size: int = 50, stop_tokens: list[str]=None) -> str:
+                        batch_size: int = 50, stop_tokens: list[str]=None,
+                        max_violations: int = 20) -> str:
     completion_points: dict[str, regex.Pattern] = {}
 
     completion_points[''] = completion_engine.complete('')
@@ -80,6 +81,7 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
     token_trie = trie.Trie.from_vocabulary(lm.vocabulary())
 
     prediction = ''
+    n_violations = 0
 
     while not completion_engine.is_complete(prediction):
         # Ask for unconstrained prediction.
@@ -113,6 +115,11 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
                 break
 
         if found_violation:
+            n_violations += 1
+
+            if n_violations > max_violations:
+                break
+
             # Do constrained prediction for next token.
             if verbose:
                 print(f"Constrained prediction for: {prediction}")
