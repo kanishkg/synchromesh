@@ -4,6 +4,8 @@ import random
 import json
 import os
 from urllib.request import urlopen
+from typing import Optional
+import shelve
 
 import openai
 import transformers
@@ -147,10 +149,23 @@ class HuggingFaceModel(LanguageModel):
                 detokenized = detokenized.split(stop_token)[0]
         return detokenized
 
+def make_request_key(model, prompt, best_of,
+                     max_tokens, temperature, valid_tokens):
+    valid_tokens = sorted(valid_tokens)
+
+    kvs = [('model', model), ('prompt', prompt),
+           ('best_of', best_of), ('valid_tokens', valid_tokens),
+           ('max_tokens', max_tokens), ('temperature', temperature)]
+
+    kvs.sort()
+    return ';'.join([f'{repr(k)}={repr(v)}' for k, v in kvs])
+
+
 class OpenAIModel(LanguageModel):
     def __init__(self, model: str, prompt_template: str, api_key: str = None,
                  temperature: float = 0.0, top_p: float = 1.0, best_of: int = 1,
-                 before_prediction_hook=lambda: None) -> None:
+                 before_prediction_hook=lambda: None,
+                 cache_path: Optional[str] = None) -> None:
         super().__init__()
 
         if api_key:
@@ -162,6 +177,11 @@ class OpenAIModel(LanguageModel):
         self.top_p = top_p
         self.best_of = best_of
         self._before_prediction_hook = before_prediction_hook
+
+        if cache_path:
+            self._cache = shelve.open(cache_path)
+        else:
+            self._cache = {}
 
         # for gpt series of models
         if model.startswith("text"):
@@ -193,6 +213,7 @@ class OpenAIModel(LanguageModel):
         # change bias of valid tokens to make them more likely
         # bias can only be set for 300 tokens at a time
         assert top_k <= 5, "top_k must be less than or equal to 5"
+
         predictions, probabilities = [], []
         prompt = f"{self.prompt_template}{prefix}"
 
@@ -226,11 +247,18 @@ class OpenAIModel(LanguageModel):
             valid_tokens = [x for _, x in sorted(zip(token_lens, valid_tokens))]
             valid_tokens = valid_tokens[:299*4-1]
 
+        request_key = make_request_key(self.model, prefix, self.best_of, 1,
+                                       self.temperature, valid_tokens)
+
+        if request_key in self._cache:
+            return self._cache.get(request_key)  # type: ignore
+
         for i in range(len(valid_tokens)//299+1):
             valid_bias = {k: 100 for k in valid_tokens[i*299:(i+1)*299]}
             # add a negative bias for the stop token
             valid_bias[50256] = -100
             self._before_prediction_hook()
+
             response = openai.Completion.create(model=self.model, prompt=prompt, logprobs=top_k,
                                                 temperature=self.temperature, top_p=self.top_p,
                                                 best_of=self.best_of, max_tokens=1, logit_bias=valid_bias)
@@ -247,6 +275,9 @@ class OpenAIModel(LanguageModel):
         predictions = predictions[:min(top_k, len(predictions))]
         predictions = list(predictions)
         probabilities = probabilities[:min(top_k, len(probabilities))]
+
+        self._cache[request_key] = (predictions, probabilities)
+
         return predictions, probabilities
 
     def predict_unconstrained(self, prefix, max_tokens, stop=None):
@@ -256,6 +287,12 @@ class OpenAIModel(LanguageModel):
         model_limit = get_token_limit(self.model)
         prompt_tokens = len(self.tokenizer.encode(prompt))
 
+        request_key = make_request_key(self.model, prefix, self.best_of, max_tokens,
+                                       self.temperature, None)
+
+        if request_key in self._cache:
+            return self._cache.get(request_key)
+
         response = openai.Completion.create(model=self.model, prompt=prompt,
                                             temperature=self.temperature, top_p=self.top_p,
                                             logit_bias={50256: -100},
@@ -264,6 +301,9 @@ class OpenAIModel(LanguageModel):
                                                 max_tokens,
                                                 model_limit - prompt_tokens - 1),
                                             stop=stop)
+
+        self._cache[request_key] = response.choices[0].text
+
         return response.choices[0].text
 
 # Source: https://platform.openai.com/docs/models/
