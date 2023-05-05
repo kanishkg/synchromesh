@@ -151,7 +151,7 @@ class HuggingFaceModel(LanguageModel):
 
 def make_request_key(model, prompt, best_of,
                      max_tokens, temperature, valid_tokens):
-    valid_tokens = sorted(valid_tokens)
+    valid_tokens = sorted(valid_tokens) if valid_tokens else None
 
     kvs = [('model', model), ('prompt', prompt),
            ('best_of', best_of), ('valid_tokens', valid_tokens),
@@ -247,7 +247,7 @@ class OpenAIModel(LanguageModel):
             valid_tokens = [x for _, x in sorted(zip(token_lens, valid_tokens))]
             valid_tokens = valid_tokens[:299*4-1]
 
-        request_key = make_request_key(self.model, prefix, self.best_of, 1,
+        request_key = make_request_key(self.model, prompt, self.best_of, 1,
                                        self.temperature, valid_tokens)
 
         if request_key in self._cache:
@@ -287,7 +287,7 @@ class OpenAIModel(LanguageModel):
         model_limit = get_token_limit(self.model)
         prompt_tokens = len(self.tokenizer.encode(prompt))
 
-        request_key = make_request_key(self.model, prefix, self.best_of, max_tokens,
+        request_key = make_request_key(self.model, prompt, self.best_of, max_tokens,
                                        self.temperature, None)
 
         if request_key in self._cache:
