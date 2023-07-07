@@ -73,7 +73,8 @@ class StreamingCSD:
 def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
                         top_k: int = 1, verbose: bool = False,
                         batch_size: int = 50, stop_tokens: list[str]=None,
-                        max_violations: int = 20) -> str:
+                        max_violations: int = 20,
+                        fast_forward: bool = False) -> str:
     completion_points: dict[str, regex.Pattern] = {}
 
     completion_points[''] = completion_engine.complete('')
@@ -87,6 +88,26 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
         # Ask for unconstrained prediction.
         if verbose:
             print('Prefix:', prediction)
+
+        if fast_forward:
+            # While there's only one valid token at this point, simply add
+            # that token instead of querying the model. This can be slow but can also
+            # save many calls to the model in use cases where the completion engine can
+            # output very long constraints (e.g. only let the model choose between generating
+            # two long sequences, so after it starts to output one the rest is determined).
+            while True:
+                valid_tokens = token_trie.antimonotonic_filter(
+                    lambda t: is_prefix_valid(completion_engine,
+                                              completion_points,
+                                              prediction + t)
+                )
+
+                if len(valid_tokens) == 1:
+                    prediction += lm.get_token(valid_tokens[0])
+                    if completion_engine.is_complete(prediction):
+                        return prediction
+                else:
+                    break
 
         continuation = lm.predict_unconstrained(prediction, batch_size, stop=stop_tokens)
         found_violation = False
