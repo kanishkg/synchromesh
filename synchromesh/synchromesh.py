@@ -68,6 +68,16 @@ class StreamingCSD:
     def get_current_prediction_tokens(self) -> list[int]:
         return self._prefix_tokens
 
+    def fast_forward(self):
+        while not self._completion_engine.is_complete(self._prefix_str):
+            v = self.get_valid_tokens()
+            if len(v) == 1:
+                self.feed_prediction(v[0])
+                if self._completion_engine.is_complete(self._prefix_str):
+                    break
+            else:
+                break
+
 
 # Implements the Constrained Semantic Decoding algorithm.
 def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
@@ -169,7 +179,6 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
 def is_prefix_valid(completion_engine: CompletionEngine,
                     completion_points: dict[str, regex.Pattern],
                     s: str) -> bool:
-
     # 1- Find longest completion point that is a prefix of s.
     longest_completion_point = 0
 
@@ -213,15 +222,12 @@ def test_streaming_csd():
         dict : "{" [pair ("," pair)*] "}"
         pair : string ":" value
 
-        string : "\"" /[A-Z]{3}/ "\""
+        string : "\"" /Some long string here that is fixed/ "\""
 
-        %import common.ESCAPED_STRING
         %import common.SIGNED_NUMBER
-        %import common.WS
-        %ignore WS
         """
 
-    comp_engine = LarkCompletionEngine(json_grammar, 'dict', True)
+    comp_engine = LarkCompletionEngine(json_grammar, 'dict', False)
     lm = RandomLanguageModel()
 
     csd = StreamingCSD(comp_engine, lm.vocabulary())
@@ -231,7 +237,7 @@ def test_streaming_csd():
 
     while not comp_engine.is_complete(csd.get_current_prediction()):
         continuation, _ = lm.predict_unconstrained(csd.get_current_prediction(),
-                                             max_tokens=1)
+                                                   max_tokens=1)
         tokens = lm.tokenize(continuation)
 
         if csd.can_token_follow(tokens[0]):
@@ -246,6 +252,8 @@ def test_streaming_csd():
 
         if len(s) > 500:
             break
+
+        csd.fast_forward()
 
     delta = time.time() - start_time
 
