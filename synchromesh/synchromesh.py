@@ -119,6 +119,9 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
                 else:
                     break
 
+            if verbose:
+                print('After fast forwarding:', prediction)
+
         continuation = lm.predict_unconstrained(prediction, batch_size, stop=stop_tokens)
         found_violation = False
 
@@ -286,5 +289,30 @@ Bot:"""
         print(predict_constrained(comp_engine, gpt3, 1, True, stop_tokens=["\n"]))
 
 
+def test_fast_forward():
+    fixed_response = r"""
+        ?response: "the answer is abcdefghijklmnopqrstuvwxyz"
+    """
+
+    prompt = """You are a helpful assistant.
+
+Human: What day is today?
+Assistant: Thursday
+
+Human: What is the answer?
+Assistant:"""
+
+    num_samples = 1
+    api_key = os.environ.get('OPENAI_API_KEY')
+    for i in range(num_samples):
+        comp_engine = LarkCompletionEngine(fixed_response, 'response', False)
+
+    ada = OpenAIModel(model="text-ada-001", prompt_template=prompt,
+                      api_key=api_key, temperature=1.)
+    print(predict_constrained(comp_engine, ada, 1, True,
+                              stop_tokens=["\n"], fast_forward=True))
+
+
+
 if __name__ == '__main__':
-    test_streaming_csd()
+    test_fast_forward()
