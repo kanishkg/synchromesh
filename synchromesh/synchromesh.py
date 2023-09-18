@@ -197,7 +197,7 @@ def is_prefix_valid(completion_engine: CompletionEngine,
         # If we have a violation of the regex.
         if not completion_point_regex.fullmatch(remainder[:i+1], partial=True):
             # Check if we have a full match up to the previous character.
-            if completion_point_regex.fullmatch(remainder[:i]):
+            if i > 0 and completion_point_regex.fullmatch(remainder[:i]):
                 # We found another completion point, reduce the problem and call recursively.
                 new_completion_point = s[:longest_completion_point] + remainder[:i]
                 new_completion_point_regex = completion_engine.complete(new_completion_point)
