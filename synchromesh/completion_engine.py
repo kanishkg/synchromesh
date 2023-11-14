@@ -3,6 +3,7 @@ from lark.exceptions import UnexpectedCharacters, UnexpectedToken
 
 import regex
 
+
 class CompletionEngine:
     def complete(self, prefix: str) -> regex.Pattern:
         raise NotImplementedError()
@@ -28,7 +29,7 @@ class LarkCompletionEngine(CompletionEngine):
         except (UnexpectedCharacters, UnexpectedToken):
             pass
         valid_tokens = interactive_parser.accepts()
-        # get the regex for the valid tokens
+        # Get the regex for the valid tokens
         valid_regex = [f'{self.terminal_dict[t].pattern.to_regexp()}'
                        for t in valid_tokens
                        if t != '$END']

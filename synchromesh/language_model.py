@@ -55,6 +55,7 @@ def download_or_use_cached(url, path):
                 f.write(response.read())
     return path
 
+
 class HuggingFaceModel(LanguageModel):
     def __init__(self, model, prompt_template: str, api_key: str = None,
                  temperature: float = 0.0, top_p: float = 1.0, best_of: int = 1,
@@ -148,6 +149,61 @@ class HuggingFaceModel(LanguageModel):
                 # split on the first stop token
                 detokenized = detokenized.split(stop_token)[0]
         return detokenized
+
+    def predict_constrained_streaming(self,
+                                      prefix: str,
+                                      constraint_stream: 'StreamingCSD',
+                                      max_tokens:int,
+                                      temperature=1e-2) -> str:
+        input_ids = self.tokenizer.encode(f'{self.prompt_template}{prefix}',
+                                          return_tensors="pt", add_special_tokens=False)
+        input_ids = input_ids.to(self.device)
+        past_key_values = None
+
+        with torch.no_grad():
+            it = 0
+            while it < max_tokens and not constraint_stream.is_complete():
+                it += 1
+                model_out = self.model(input_ids,
+                                       use_cache=True,
+                                       past_key_values=past_key_values)
+
+                past_key_values = model_out.past_key_values
+                logits = model_out.logits[:, -1].squeeze(0)
+                token_p = (logits / temperature).softmax(-1)
+
+                # Sample a token and check if valid. If not, compute constraints.
+                next_token = token_p.multinomial(1).item()
+
+                if not constraint_stream.can_token_follow(next_token):
+                    valid_tokens = constraint_stream.get_valid_tokens()
+                    valid_tokens_mask = torch.zeros(logits.shape[-1], dtype=torch.bool)
+                    valid_tokens_set = set(valid_tokens)
+
+                    if None in valid_tokens_set:
+                        valid_tokens_set.remove(None)
+
+                    valid_tokens = list(valid_tokens_set)
+                    valid_tokens_mask[valid_tokens] = True
+                    token_p = logits[:]
+                    token_p[~valid_tokens_mask] = float('-inf')
+                    token_p = (token_p / temperature).softmax(-1)
+
+                    # Renormalize and resample
+                    assert token_p.sum() > 0, \
+                            f"No valid tokens at given prefix '{constraint_stream.get_current_prediction()}'. This might be an issue with the Completion Engine."
+                    next_token = token_p.multinomial(1).item()
+
+                    if next_token not in valid_tokens:
+                        breakpoint()
+
+                    assert next_token in valid_tokens
+
+                constraint_stream.feed_prediction(next_token)
+                input_ids = torch.ones((1, 1), device=self.device, dtype=int) * next_token
+
+        return constraint_stream.get_current_prediction()
+
 
 def make_request_key(model, prompt, best_of,
                      max_tokens, temperature, valid_tokens):

@@ -4,9 +4,9 @@ import os
 import regex
 import time
 
-from completion_engine import CompletionEngine, LarkCompletionEngine
-from language_model import LanguageModel, RandomLanguageModel, OpenAIModel
-import trie
+from .completion_engine import CompletionEngine, LarkCompletionEngine
+from .language_model import LanguageModel, RandomLanguageModel, OpenAIModel
+from . import trie
 
 
 class StreamingCSD:
@@ -47,6 +47,8 @@ class StreamingCSD:
         self._prefix_str = ''
 
     def can_token_follow(self, t: int):
+        if not self._vocab[t]: # Bogus token.
+            return False
         return is_prefix_valid(self._completion_engine,
                                self._completion_points,
                                self._prefix_str + self._vocab[t])
@@ -57,10 +59,10 @@ class StreamingCSD:
 
     def get_valid_tokens(self) -> list[int]:
         return self._trie.antimonotonic_filter(
-                lambda t: is_prefix_valid(self._completion_engine,
-                                          self._completion_points,
-                                          self._prefix_str + t)
-            )
+                lambda t:
+                    is_prefix_valid(self._completion_engine,
+                        self._completion_points,
+                        self._prefix_str + t))
 
     def get_current_prediction(self) -> str:
         return self._prefix_str
@@ -68,15 +70,15 @@ class StreamingCSD:
     def get_current_prediction_tokens(self) -> list[int]:
         return self._prefix_tokens
 
+    def is_complete(self) -> bool:
+        return self._completion_engine.is_complete(self._prefix_str)
+
     def fast_forward(self):
-        while not self._completion_engine.is_complete(self._prefix_str):
+        while not self.is_complete():
             v = self.get_valid_tokens()
-            if len(v) == 1:
-                self.feed_prediction(v[0])
-                if self._completion_engine.is_complete(self._prefix_str):
-                    break
-            else:
+            if len(v) > 1:
                 break
+            self.feed_prediction(v[0])
 
 
 # Implements the Constrained Semantic Decoding algorithm.
@@ -197,7 +199,7 @@ def is_prefix_valid(completion_engine: CompletionEngine,
         # If we have a violation of the regex.
         if not completion_point_regex.fullmatch(remainder[:i+1], partial=True):
             # Check if we have a full match up to the previous character.
-            if completion_point_regex.fullmatch(remainder[:i]):
+            if i and completion_point_regex.fullmatch(remainder[:i]):
                 # We found another completion point, reduce the problem and call recursively.
                 new_completion_point = s[:longest_completion_point] + remainder[:i]
                 new_completion_point_regex = completion_engine.complete(new_completion_point)

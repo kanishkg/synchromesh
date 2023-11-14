@@ -19,7 +19,8 @@ class Trie:
         t = Trie()
 
         for i, token in enumerate(vocab):
-            t.insert(token, i)
+            if token:
+                t.insert(token, i)
 
         return t
 
