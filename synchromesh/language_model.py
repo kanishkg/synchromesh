@@ -79,7 +79,8 @@ class HuggingFaceModel(LanguageModel):
 
         # HACK: Is there a better way to know if a token has a prefix space?
         # We should only need this for LlamaTokenizer.
-        if isinstance(self.tokenizer, transformers.LlamaTokenizer):
+        if self.tokenizer.__class__.__name__.startswith('LlamaTokenizer'):
+            print('LlamaTokenizer')
             for i in range(len(self.vocab)):
                 t = self.vocab[i]
                 if 2*len(t) != len(self.tokenizer.decode([i, i], add_special_tokens=False)):
@@ -153,8 +154,7 @@ class HuggingFaceModel(LanguageModel):
     def predict_constrained_streaming(self,
                                       prefix: str,
                                       constraint_stream: 'StreamingCSD',
-                                      max_tokens:int,
-                                      temperature=1e-2) -> str:
+                                      max_tokens:int) -> str:
         input_ids = self.tokenizer.encode(f'{self.prompt_template}{prefix}',
                                           return_tensors="pt", add_special_tokens=False)
         input_ids = input_ids.to(self.device)
@@ -170,7 +170,7 @@ class HuggingFaceModel(LanguageModel):
 
                 past_key_values = model_out.past_key_values
                 logits = model_out.logits[:, -1].squeeze(0)
-                token_p = (logits / temperature).softmax(-1)
+                token_p = (logits / self.temperature).softmax(-1)
 
                 # Sample a token and check if valid. If not, compute constraints.
                 next_token = token_p.multinomial(1).item()
@@ -187,17 +187,14 @@ class HuggingFaceModel(LanguageModel):
                     valid_tokens_mask[valid_tokens] = True
                     token_p = logits[:]
                     token_p[~valid_tokens_mask] = float('-inf')
-                    token_p = (token_p / temperature).softmax(-1)
+                    token_p = (token_p / self.temperature).softmax(-1)
 
                     # Renormalize and resample
                     assert token_p.sum() > 0, \
                             f"No valid tokens at given prefix '{constraint_stream.get_current_prediction()}'. This might be an issue with the Completion Engine."
                     next_token = token_p.multinomial(1).item()
 
-                    if next_token not in valid_tokens:
-                        breakpoint()
-
-                    assert next_token in valid_tokens
+                    assert next_token in valid_tokens, 'Sampled a forbidden token. This is likely a bug.'
 
                 constraint_stream.feed_prediction(next_token)
                 input_ids = torch.ones((1, 1), device=self.device, dtype=int) * next_token
