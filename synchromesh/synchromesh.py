@@ -47,8 +47,6 @@ class StreamingCSD:
         self._prefix_str = ''
 
     def can_token_follow(self, t: int):
-        if not self._vocab[t]: # Bogus token.
-            return False
         return is_prefix_valid(self._completion_engine,
                                self._completion_points,
                                self._prefix_str + self._vocab[t])
@@ -87,6 +85,15 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
                         batch_size: int = 50, stop_tokens: list[str]=None,
                         max_violations: int = 20,
                         fast_forward: bool = False) -> str:
+
+    # If model implements (faster) streaming inference, use that instead of batch + rejection.
+    if hasattr(lm, 'predict_constrained_streaming'):
+        return lm.predict_constrained_streaming(
+                '',
+                StreamingCSD(completion_engine, lm.vocabulary()),
+                1000
+                )
+
     completion_points: dict[str, regex.Pattern] = {}
 
     completion_points[''] = completion_engine.complete('')
