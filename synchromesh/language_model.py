@@ -80,7 +80,6 @@ class HuggingFaceModel(LanguageModel):
         # HACK: Is there a better way to know if a token has a prefix space?
         # We should only need this for LlamaTokenizer.
         if self.tokenizer.__class__.__name__.startswith('LlamaTokenizer'):
-            print('LlamaTokenizer')
             for i in range(len(self.vocab)):
                 t = self.vocab[i]
                 if 2*len(t) != len(self.tokenizer.decode([i, i], add_special_tokens=False)):
