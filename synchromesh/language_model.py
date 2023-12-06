@@ -81,7 +81,7 @@ class HuggingFaceModel(LanguageModel):
         # HACK: Is there a better way to know if a token has a prefix space?
         # We should only need this for LlamaTokenizer
         # (as it's the most popular SentencePiece derivative right now - others would need this too).
-        if self.tokenizer.__class__.__name__.startswith('LlamaTokenizer'):
+        if 'Llama' in self.tokenizer.__class__.__name__:
             for i in range(len(self.vocab)):
                 t = self.vocab[i]
                 if 2*len(t) != len(self.tokenizer.decode([i, i], add_special_tokens=False)):
