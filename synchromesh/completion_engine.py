@@ -14,6 +14,8 @@ class CompletionEngine:
 
 class LarkCompletionEngine(CompletionEngine):
     def __init__(self, grammar, start_token, allow_ws: bool = True):
+        self.grammar = grammar
+        self.start_token = start_token
         self.parser = Lark(grammar, start=start_token, parser='lalr',
                            regex=True)
         self.terminal_dict = self.parser._terminals_dict
@@ -38,6 +40,13 @@ class LarkCompletionEngine(CompletionEngine):
             valid_regex.append("\\s+")
 
         return regex.compile('|'.join(valid_regex))
+
+    def __deepcopy__(self, memo):
+        return LarkCompletionEngine(
+            grammar=self.grammar,
+            start_token=self.start_token,
+            allow_ws=self.allow_ws
+        )
 
 
 def main():
