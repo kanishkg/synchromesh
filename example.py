@@ -28,7 +28,7 @@ Assistant:"""
     comp_engine = LarkCompletionEngine(college_grammar, 'request', False)
 
     # Can be any huggingface model string or local path to weights.
-    HF_MODEL = '/scr/poesia/7B'
+    HF_MODEL = 'gpt2'
     gpt2 = AutoModelForCausalLM.from_pretrained(HF_MODEL, device_map='auto')
     tokenizer = AutoTokenizer.from_pretrained(HF_MODEL)
 
