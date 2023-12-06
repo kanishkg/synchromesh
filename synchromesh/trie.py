@@ -5,9 +5,10 @@ import collections
 # Trie representation of a vocabulary.
 class Trie:
     def __init__(self, value=None, enforce_token_maximality=True):
-        self._children = collections.defaultdict(Trie)
+        self._children = collections.defaultdict(
+                lambda: Trie(enforce_token_maximality=enforce_token_maximality))
         self._value = value
-        self._enforce_token_maxilaity = enforce_token_maximality
+        self._enforce_token_maximality = enforce_token_maximality
 
     def insert(self, key, value, depth=0):
         if len(key) == depth:
@@ -37,10 +38,12 @@ class Trie:
         for k, c in self._children.items():
             children_values.extend(c.antimonotonic_filter(predicate, key + k))
 
-        if self._enforce_token_maxilaity:
+        this_value = [self._value] if self._value is not None else []
+
+        if self._enforce_token_maximality:
             # Only return maximal strings.
             if len(children_values) or self._value is None:
                 return children_values
-            return [self._value]
+            return this_value
 
-        return [self._value] + children_values
+        return this_value + children_values
