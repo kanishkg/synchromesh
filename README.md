@@ -52,7 +52,7 @@ Human: what's the department of BIO433?
 Assistant:
 ```
 
-Note that, following our grammar, this query should be translated to "deptcode of BIO433". But the language model wouldn't know, of course, since we haven't described this in the prompt. Even if we did, there would be no guarantee that it would follow it (especially smaller models).
+Note that, following our grammar, this query should be translated to "deptcode of BIO433". But the language model wouldn't know, of course, since we haven't described this in the prompt. Even if we did, there would be no guarantee that it would follow the instructions. This is especially true for smaller models.
 
 The example uses CSD to sample 10 strings from an arbitrary language model while respecting the grammar. By default it will use GPT-2, but feel free to change it to your favorite model. One output we might get with GPT-2 is:
 
@@ -86,6 +86,6 @@ LLaMA2-7B prediction: school of BIO433
 
 This is better: at least the class is correct in all of the predictions.
 
-This example is rather contrived, since both models have a single token for "department", which they assign high probability to, but that is ruled out by CSD. For GPT-2, the correct prediction is tokenized as `["de", "pt", "code", " of", " B", "IO", "433"]`, and GPT-2 does not assign very high probability for the token "de" in this context. LLaMA has a yet different tokenization. While this is not how you would to this if the goal was to get the most accurate results, it does show that CSD will work around these tokenization intricacies and still give you outputs that are valid regardless of which language model you choose.
+This example is rather adversarial for the language models, since both have a single token for "department", which they assign high probability to, but that is ruled out by CSD. For GPT-2, the correct prediction is tokenized as `["de", "pt", "code", " of", " B", "IO", "433"]`, and GPT-2 does not assign very high probability for the token "de" in this context. LLaMA has a yet different tokenization. While this is not how you would to this if the goal was to get the most accurate results, it does show that CSD will work around these tokenization intricacies and still give you outputs that are valid regardless of which language model you choose.
 
 
