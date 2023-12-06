@@ -5,7 +5,7 @@ import regex
 import time
 
 from .completion_engine import CompletionEngine, LarkCompletionEngine
-from .language_model import LanguageModel, RandomLanguageModel, OpenAIModel
+from .language_model import LanguageModel, RandomLanguageModel, OpenAIModel, HuggingFaceModel
 from . import trie
 
 
@@ -27,14 +27,15 @@ class StreamingCSD:
 
     The reason for this is that can_token_follow is more efficient
     than get_valid_tokens (which iterates over the vocabulary, although
-    with very heavy pruning). Thus, the fewer calls to get_valid_tokens()
-    you can do, the better.
+    with very heavy pruning via the Trie and anti-monotonicity).
+    Thus, the fewer calls to get_valid_tokens() you can do, the better.
     '''
 
     def __init__(self,
                  completion_engine: CompletionEngine,
-                 lm_vocabulary: list[str]):
-        self._trie = trie.Trie.from_vocabulary(lm_vocabulary)
+                 lm_vocabulary: list[str],
+                 enforce_token_maximality: bool = True):
+        self._trie = trie.Trie.from_vocabulary(lm_vocabulary, enforce_token_maximality)
         self._vocab = lm_vocabulary
         self._completion_engine = completion_engine
         self._completion_points: dict[str, regex.Pattern] = {}
@@ -90,7 +91,7 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
     if hasattr(lm, 'predict_constrained_streaming'):
         return lm.predict_constrained_streaming(
                 '',
-                StreamingCSD(completion_engine, lm.vocabulary()),
+                StreamingCSD(completion_engine, lm.vocabulary(), False),
                 1000
                 )
 
@@ -272,56 +273,4 @@ def test_streaming_csd():
     print('Predicted:', repr(csd.get_current_prediction()))
     print('Throughput:', len(csd.get_current_prediction_tokens()) / delta, 'tokens/s')
 
-def test_college_grammar_csd():
-    college_grammar = r"""
-        ?request: function "of" dept code
-        function: "instructor" | "students" | "capacity" | "department" | "school" | "college"
-        dept:  /[A-Z]{3}/
-        code: /[0-9]{3}/
-        %import common.WS
-        %ignore WS
-    """
 
-    college_prompt = """Paraphrase the following sentences
-Human:who teaches CSE101?
-Bot:instructor of CSE101
-Human:how many students can enroll in PSY456?
-Bot:capacity of PSY456
-Human:what's the department of BIO433?
-Bot:"""
-    num_samples = 1
-    api_key = os.environ.get('OPENAI_API_KEY')
-    for i in range(num_samples):
-        comp_engine = LarkCompletionEngine(college_grammar, 'request', True)
-        # rlm = RandomLanguageModel()
-        gpt3 = OpenAIModel(model="text-ada-001", prompt_template=college_prompt, api_key=api_key, temperature=1.)
-        print(predict_constrained(comp_engine, gpt3, 1, True, stop_tokens=["\n"]))
-
-
-def test_fast_forward():
-    fixed_response = r"""
-        ?response: "the answer is abcdefghijklmnopqrstuvwxyz"
-    """
-
-    prompt = """You are a helpful assistant.
-
-Human: What day is today?
-Assistant: Thursday
-
-Human: What is the answer?
-Assistant:"""
-
-    num_samples = 1
-    api_key = os.environ.get('OPENAI_API_KEY')
-    for i in range(num_samples):
-        comp_engine = LarkCompletionEngine(fixed_response, 'response', False)
-
-    ada = OpenAIModel(model="text-ada-001", prompt_template=prompt,
-                      api_key=api_key, temperature=1.)
-    print(predict_constrained(comp_engine, ada, 1, True,
-                              stop_tokens=["\n"], fast_forward=True))
-
-
-
-if __name__ == '__main__':
-    test_fast_forward()

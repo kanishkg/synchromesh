@@ -6,6 +6,7 @@ import os
 from urllib.request import urlopen
 from typing import Optional
 import shelve
+import time
 
 import openai
 import transformers
@@ -57,9 +58,9 @@ def download_or_use_cached(url, path):
 
 
 class HuggingFaceModel(LanguageModel):
-    def __init__(self, model, prompt_template: str, api_key: str = None,
+    def __init__(self, model, prompt_template: str, tokenizer,
                  temperature: float = 0.0, top_p: float = 1.0, best_of: int = 1,
-                 before_prediction_hook=lambda: None, tokenizer=None, device='cuda') -> None:
+                 before_prediction_hook=lambda: None, device='cuda') -> None:
         super().__init__()
 
         self.prompt_template = prompt_template
@@ -78,7 +79,8 @@ class HuggingFaceModel(LanguageModel):
                               for _, t_id in self.tokenizer.get_vocab().items()])]
 
         # HACK: Is there a better way to know if a token has a prefix space?
-        # We should only need this for LlamaTokenizer.
+        # We should only need this for LlamaTokenizer
+        # (as it's the most popular SentencePiece derivative right now - others would need this too).
         if self.tokenizer.__class__.__name__.startswith('LlamaTokenizer'):
             for i in range(len(self.vocab)):
                 t = self.vocab[i]
@@ -151,9 +153,13 @@ class HuggingFaceModel(LanguageModel):
         return detokenized
 
     def predict_constrained_streaming(self,
-                                      prefix: str,
-                                      constraint_stream: 'StreamingCSD',
-                                      max_tokens:int) -> str:
+                                      prefix : str,
+                                      constraint_stream : 'StreamingCSD',
+                                      max_tokens : int,
+                                      print_profiling_info : bool = False) -> str:
+        before_all = time.time()
+        inference_time = 0
+
         input_ids = self.tokenizer.encode(f'{self.prompt_template}{prefix}',
                                           return_tensors="pt", add_special_tokens=False)
         input_ids = input_ids.to(self.device)
@@ -163,13 +169,15 @@ class HuggingFaceModel(LanguageModel):
             it = 0
             while it < max_tokens and not constraint_stream.is_complete():
                 it += 1
+                before_inference = time.time()
                 model_out = self.model(input_ids,
                                        use_cache=True,
                                        past_key_values=past_key_values)
+                inference_time += time.time() - before_inference
 
                 past_key_values = model_out.past_key_values
                 logits = model_out.logits[:, -1].squeeze(0)
-                token_p = (logits / self.temperature).softmax(-1)
+                token_p = temperature_softmax(logits, self.temperature)
 
                 # Sample a token and check if valid. If not, compute constraints.
                 next_token = token_p.multinomial(1).item()
@@ -186,19 +194,33 @@ class HuggingFaceModel(LanguageModel):
                     valid_tokens_mask[valid_tokens] = True
                     token_p = logits[:]
                     token_p[~valid_tokens_mask] = float('-inf')
-                    token_p = (token_p / self.temperature).softmax(-1)
+                    token_p = temperature_softmax(token_p, self.temperature)
 
                     # Renormalize and resample
                     assert token_p.sum() > 0, \
                             f"No valid tokens at given prefix '{constraint_stream.get_current_prediction()}'. This might be an issue with the Completion Engine."
                     next_token = token_p.multinomial(1).item()
-
+                    
                     assert next_token in valid_tokens, 'Sampled a forbidden token. This is likely a bug.'
 
                 constraint_stream.feed_prediction(next_token)
                 input_ids = torch.ones((1, 1), device=self.device, dtype=int) * next_token
 
+        total_elapsed = time.time() - before_all
+
+        if print_profiling_info:
+            print(f'{total_elapsed:.2f}s in inference, {inference_time:.2f}s on LLM inference ({inference_time / total_elapsed * 100:.1f}%)')
+
         return constraint_stream.get_current_prediction()
+
+def temperature_softmax(t: torch.tensor, temperature: float) -> torch.tensor:
+    if temperature == 0:
+        # One-hot vector on the argmax.
+        p = torch.zeros_like(t)
+        p[t.argmax(-1)] = 1.0
+        return p
+    
+    return (t / temperature).softmax(-1)
 
 
 def make_request_key(model, prompt, best_of,
