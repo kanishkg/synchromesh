@@ -87,7 +87,6 @@ class StreamingCSD:
             lm_vocabulary=deepcopy(self._vocab),
             enforce_token_maximality=deepcopy(self.enforce_token_maximality)
         )
-        # TODO: copy the trie?
         for t in self._prefix_tokens:
             csd.feed_prediction(t)
         return csd
