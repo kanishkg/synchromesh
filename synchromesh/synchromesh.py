@@ -3,6 +3,7 @@
 import os
 import regex
 import time
+from copy import deepcopy
 
 from .completion_engine import CompletionEngine, LarkCompletionEngine
 from .language_model import LanguageModel, RandomLanguageModel, OpenAIModel, HuggingFaceModel
@@ -40,6 +41,7 @@ class StreamingCSD:
         self._completion_engine = completion_engine
         self._completion_points: dict[str, regex.Pattern] = {}
         self._completion_points[''] = completion_engine.complete('')
+        self.enforce_token_maximality = enforce_token_maximality
 
         self.init_stream()
 
@@ -78,6 +80,17 @@ class StreamingCSD:
             if len(v) > 1:
                 break
             self.feed_prediction(v[0])
+
+    def __deepcopy__(self, memo):
+        csd = StreamingCSD(
+            completion_engine=deepcopy(self._completion_engine),
+            lm_vocabulary=deepcopy(self._vocab),
+            enforce_token_maximality=deepcopy(self.enforce_token_maximality)
+        )
+        for t in self._prefix_tokens:
+            csd.feed_prediction(t)
+        return csd
+
 
 
 # Implements the Constrained Semantic Decoding algorithm.
