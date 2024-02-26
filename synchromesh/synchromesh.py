@@ -105,7 +105,8 @@ def predict_constrained(completion_engine: CompletionEngine, lm: LanguageModel,
         return lm.predict_constrained_streaming(
                 '',
                 StreamingCSD(completion_engine, lm.vocabulary(), False),
-                1000
+                1000,
+                print_profiling_info=verbose
                 )
 
     completion_points: dict[str, regex.Pattern] = {}
